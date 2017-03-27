@@ -9,7 +9,7 @@ int main(int argc, char * argv[]) {
         if (pid != 0)
             pid = fork();
         if (pid != 0)
-             printf("Processo pai %d criou %d\n", getpid(), pid);
+            printf("Processo pai %d criou %d\n", getpid(), pid);
     }
 
     return 0;
