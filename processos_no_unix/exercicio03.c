@@ -1,9 +1,10 @@
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <stdio.h>
 
 void imprimir_afiliacao(pid_t filho, pid_t pai) {
-  printf("Processo %d filho de %d\n", filho, pai);
+
 }
 
 int main(int argc, char * argv[]) {
@@ -15,6 +16,8 @@ int main(int argc, char * argv[]) {
   for(int i = 0; i < 2; i++) {
     if (pid != 0)
       pid = fork();
+    if(pid == 0)
+      break;
   }
 
   // Filhos do pai cria 2 netos
@@ -22,14 +25,18 @@ int main(int argc, char * argv[]) {
     for(int i = 0; i < 2; i++) {
       if (pid2 != 0)
         pid2 = fork();
+      if (pid2 == 0)
+        break;
     }
   }
 
   // Todos menos o pai imprime
-  if (pid == 0) {
-    pid_t meu_nome = getpid();
-    pid_t nome_pai = getppid();
-    imprimir_afiliacao(meu_nome, nome_pai);
+  if (pid == 0)
+    printf("Processo %d filho de %d\n", getpid(), getppid());
+
+  // Processo Pai (qualquer) espera seus filhos
+  while (wait(NULL) != -1) {
   }
+
   return 0;
 }
