@@ -17,6 +17,13 @@
 #include <pthread.h>
 typedef unsigned char cell_t;
 
+// Variáveis goblais
+unsigned int quant_threads;
+cell_t ** prev, next, tmp;
+struct Submatrix {
+  int minor_i, minor_j, major_i, major_j;
+};
+
 //! Calcula divisão das threads
 /*  Calcula a divisão da matriz de forma mais adequada
  *  procurando o a menor diferença entre as sub-matrizes.
@@ -34,6 +41,46 @@ void division_of_work(int number_threads, int &row, int &col) {
     --i;
     ++j;
   }
+}
+
+//! Play de uma thread
+void thread_play(void *stru) {
+  struct Thread *th = (*Thread) stru;
+
+  /* for each cell, apply the rules of Life */
+  for (i=0; i<size; i++)
+    for (j=0; j<size; j++) {
+      a = adjacent_to(board, size, i, j);
+      if (a == 2) newboard[i][j] = board[i][j]; // Still the same
+      if (a == 3) newboard[i][j] = 1;           // It's Alive!!! FRANKENSTEIN
+      if (a < 2) newboard[i][j] = 0;            // Dies
+      if (a > 3) newboard[i][j] = 0;            // Dies
+    }
+}
+
+void play(cell_t ** board, cell_t ** newboard, int size) {
+  int	i, j, a, row, col;
+
+  division_of_work(quant_threads, row, col);
+  pthread_t threads[quant_threads];
+  int init_line = 0;
+  int init_col = 0;
+  int end_line = size/row;
+  int end_col = size/col;
+  for (int i = 0; i < quant_threads; ++i) {
+    struct Thread th;
+    pthread_create(&threads[i], NULL, thread_play, (* void) th);
+  }
+
+  /* for each cell, apply the rules of Life */
+  for (i=0; i<size; i++)
+    for (j=0; j<size; j++) {
+      a = adjacent_to(board, size, i, j);
+      if (a == 2) newboard[i][j] = board[i][j]; // Still the same
+      if (a == 3) newboard[i][j] = 1;           // It's Alive!!! FRANKENSTEIN
+      if (a < 2) newboard[i][j] = 0;            // Dies
+      if (a > 3) newboard[i][j] = 0;            // Dies
+    }
 }
 
 cell_t ** allocate_board(int size) {
@@ -67,19 +114,6 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
   count-=board[i][j]; // Your own decreased cell position
 
   return count;
-}
-
-void play(cell_t ** board, cell_t ** newboard, int size) {
-  int	i, j, a;
-  /* for each cell, apply the rules of Life */
-  for (i=0; i<size; i++)
-    for (j=0; j<size; j++) {
-      a = adjacent_to(board, size, i, j);
-      if (a == 2) newboard[i][j] = board[i][j]; // Still the same
-      if (a == 3) newboard[i][j] = 1;           // It's Alive!!! FRANKENSTEIN
-      if (a < 2) newboard[i][j] = 0;            // Dies
-      if (a > 3) newboard[i][j] = 0;            // Dies
-    }
 }
 
 /* print the life board */
@@ -120,11 +154,10 @@ int main(int argc, char * argv[]) {
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
-  cell_t ** prev = allocate_board(size); // Uma thread aloca o prev
+  prev = allocate_board(size); // Uma thread aloca o prev
   read_file(f, prev,size);
   fclose(f);
-  cell_t ** next = allocate_board(size); // Uma thread aloca o next
-  cell_t ** tmp;
+  next = allocate_board(size); // Uma thread aloca o next
   int i;
 
   #ifdef DEBUG
