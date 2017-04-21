@@ -14,21 +14,34 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 typedef unsigned char cell_t;
 
-cell_t ** allocate_board(int size) {
-  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  int	i;
-  for (i=0; i<size; i++)
-    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
-  return board;
-}
+// Variáveis goblais
+unsigned int amount_of_threads;
+cell_t ** prev, next, tmp;
 
-void free_board(cell_t ** board, int size) {
-  int i;
-  for (i=0; i<size; i++)
-    free(board[i]);
-  free(board);
+struct Submatrix {
+  int minor_i, minor_j, major_i, major_j;
+};
+
+//! Calcula divisão das threads
+/*  Calcula a divisão da matriz de forma mais adequada
+ *  procurando o a menor diferença entre as sub-matrizes.
+ *  row+col-2 == quantidade de mutex que será necessário.
+ *  Mas será que precisa de mutex? Cada thread escreve em
+ *  um lugar diferente.
+ */
+void division_of_work(int number_threads, int &row, int &col) {
+  int i=number_threads, j=1;
+  while (i >= j) {
+    if (i*j == number_threads) {
+      row = i;
+      col = j;
+    }
+    --i;
+    ++j;
+  }
 }
 
 /* return the number of on cells adjacent to the i,j cell */
@@ -49,17 +62,63 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
   return count;
 }
 
-void play(cell_t ** board, cell_t ** newboard, int size) {
+//! Play de uma thread
+void thread_play(void *arg) {
+  struct Submatrix *sub = (*Submatrix) arg;
   int	i, j, a;
+
   /* for each cell, apply the rules of Life */
-  for (i=0; i<size; i++)
-    for (j=0; j<size; j++) {
+  for (i=sub->minor_i; i<=sub->major_i; i++)
+    for (j=sub->minor_j; j<=sub->major_j; j++) {
       a = adjacent_to(board, size, i, j);
       if (a == 2) newboard[i][j] = board[i][j]; // Still the same
       if (a == 3) newboard[i][j] = 1;           // It's Alive!!! FRANKENSTEIN
       if (a < 2) newboard[i][j] = 0;            // Dies
       if (a > 3) newboard[i][j] = 0;            // Dies
     }
+}
+
+void play(cell_t ** board, cell_t ** newboard, int size) {
+  int row, col, tmp, n_row, n_col;
+  pthread_t threads[amount_of_threads];
+
+  division_of_work(amount_of_threads, row, col);
+  tmp = size/row;
+  n_row = tmp * row == size? tmp : tmp+1;
+  tmp = size/col;
+  n_col = tmp * col == size? tmp : tmp+1;
+
+  for (int t = 0; t < amount_of_threads; ++t) {
+    int condition;
+    struct Submatrix sub;
+
+    sub.minor_i = ((t%col)%row)*n_row;
+    condition = ((t%col+1)%row)*n_row;
+    sub.major_i = condition <= size? condition : size;
+    sub.minor_j = (t%col)*n_col;
+    condition = (t%col+1)*n_col;
+    sub.major_j = condition <= size? condition : size;
+    pthread_create(&threads[i], NULL, thread_play, (*void) &sub);
+  }
+
+  for (int t = 0; t < amount_of_threads; ++t) {
+    pthread_join(threads[i], NULL);
+  }
+}
+
+cell_t ** allocate_board(int size) {
+  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
+  int	i;
+  for (i=0; i<size; i++)
+    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
+  return board;
+}
+
+void free_board(cell_t ** board, int size) {
+  int i;
+  for (i=0; i<size; i++)
+    free(board[i]);
+  free(board);
 }
 
 /* print the life board */
@@ -95,16 +154,17 @@ void read_file(FILE * f, cell_t ** board, int size) {
 
 int main(int argc, char * argv[]) {
 
+  amount_of_threads = argc > 1? atoi(argv[1]) : 1;
+
   // Cria tabuleiro e carrega células
   int size, steps;
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
-  cell_t ** prev = allocate_board(size); // Uma thread aloca o prev
+  prev = allocate_board(size); // Uma thread aloca o prev
   read_file(f, prev,size);
   fclose(f);
-  cell_t ** next = allocate_board(size); // Uma thread aloca o next
-  cell_t ** tmp;
+  next = allocate_board(size); // Uma thread aloca o next
   int i;
 
   #ifdef DEBUG
