@@ -14,7 +14,27 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 typedef unsigned char cell_t;
+
+//! Calcula divisão das threads
+/*  Calcula a divisão da matriz de forma mais adequada
+ *  procurando o a menor diferença entre as sub-matrizes.
+ *  row+col-2 == quantidade de mutex que será necessário.
+ *  Mas será que precisa de mutex? Cada thread escreve em
+ *  um lugar diferente.
+ */
+void division_of_work(int number_threads, int &row, int &col) {
+  int i=number_threads, j=1;
+  while (i >= j) {
+    if (i*j == number_threads) {
+      row = i;
+      col = j;
+    }
+    --i;
+    ++j;
+  }
+}
 
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
