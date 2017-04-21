@@ -20,31 +20,32 @@ cell_t ** allocate_board (int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
   int	i;
   for (i=0; i<size; i++)
-  board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
+    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
   return board;
 }
 
 void free_board (cell_t ** board, int size) {
-  int     i;
+  int i;
   for (i=0; i<size; i++)
-  free(board[i]);
+    free(board[i]);
   free(board);
 }
-
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to (cell_t ** board, int size, int i, int j) {
   int	k, l, count=0;
 
+  // Limits
   int sk = (i>0) ? i-1 : i;
   int ek = (i+1 < size) ? i+1 : i;
   int sl = (j>0) ? j-1 : j;
   int el = (j+1 < size) ? j+1 : j;
 
   for (k=sk; k<=ek; k++)
-  for (l=sl; l<=el; l++)
-  count+=board[k][l];
-  count-=board[i][j];
+    for (l=sl; l<=el; l++)
+      count+=board[k][l];
+
+  count-=board[i][j]; // Your own decreased cell position
 
   return count;
 }
@@ -53,13 +54,13 @@ void play (cell_t ** board, cell_t ** newboard, int size) {
   int	i, j, a;
   /* for each cell, apply the rules of Life */
   for (i=0; i<size; i++)
-  for (j=0; j<size; j++) {
-    a = adjacent_to (board, size, i, j);
-    if (a == 2) newboard[i][j] = board[i][j];
-    if (a == 3) newboard[i][j] = 1;
-    if (a < 2) newboard[i][j] = 0;
-    if (a > 3) newboard[i][j] = 0;
-  }
+    for (j=0; j<size; j++) {
+      a = adjacent_to (board, size, i, j);
+      if (a == 2) newboard[i][j] = board[i][j]; // Still the same
+      if (a == 3) newboard[i][j] = 1;           // It's Alive!!! FRANKENSTEIN
+      if (a < 2) newboard[i][j] = 0;            // Dies
+      if (a > 3) newboard[i][j] = 0;            // Dies
+    }
 }
 
 /* print the life board */
@@ -89,43 +90,48 @@ void read_file (FILE * f, cell_t ** board, int size) {
     fgets (s, size+10,f);
     /* copy the string to the life board */
     for (i=0; i<size; i++)
-    board[i][j] = s[i] == 'x';
-
+      board[i][j] = s[i] == 'x';
   }
 }
 
-int main () {
+int main (int argc, char * argv[]) {
+
+  // Cria tabuleiro e carrega células
   int size, steps;
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
-  cell_t ** prev = allocate_board (size);
+  cell_t ** prev = allocate_board (size); // Uma thread aloca o prev
   read_file (f, prev,size);
   fclose(f);
-  cell_t ** next = allocate_board (size);
+  cell_t ** next = allocate_board (size); // Uma thread aloca o next
   cell_t ** tmp;
   int i;
+
   #ifdef DEBUG
   printf("Initial:\n");
   print(prev,size);
   #endif
 
+  // Cálculo das gerações
   for (i=0; i<steps; i++) {
     play (prev,next,size);
+
     #ifdef DEBUG
     printf("%d ----------\n", i + 1);
     print (next,size);
     #endif
+
     tmp = next;
     next = prev;
     prev = tmp;
   }
 
-#ifdef RESULT
+  #ifdef RESULT
   printf("Final:\n");
   print (prev,size);
-#endif
+  #endif
 
-  free_board(prev,size);
-  free_board(next,size);
+  free_board(prev,size); // Desaloca memória
+  free_board(next,size); // Desaloca memória
 }
