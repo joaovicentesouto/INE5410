@@ -75,6 +75,7 @@ void play(void *arg) {
     }
   }
   free(sub);
+  pthread_exit(NULL);
 }
 
 void allocate_board(cell_t ** board, int size) {
@@ -121,16 +122,21 @@ void read_file(FILE * f, cell_t ** board, int size) {
 int main(int argc, char * argv[]) {
 
   int max_threads = argc > 1? atoi(argv[1]) : 1;
+  printf("max_t:%d\n", max_threads);
 
   // Cria tabuleiro e carrega células
   int size, steps;
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
+  printf("antes alocar prev\n");
   allocate_board(prev, size);
-  read_file(f, prev,size);
+  printf("depois de alocar prev\n");
+  read_file(f, prev, size);
+  printf("depois de ler prev\n");
   fclose(f);
   allocate_board(next, size);
+  printf("size:%d\n", size);
 
   #ifdef DEBUG
   printf("Initial:\n");

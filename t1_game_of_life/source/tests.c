@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "stdio.h"
 #include "math.h"
-#define  MAX_THREADS 4
+#define  MAX_THREADS 1
 
 int main(int argc, char * argv[]) {
 
@@ -19,7 +19,7 @@ int main(int argc, char * argv[]) {
         }
     }
 
-    int n_row, n_col, count=0, n=30;
+    int n_row, n_col, count=0, n=11;
 
     n_row = (int) n/row;
     n_row = n_row*row == n? n_row : n_row+1;
