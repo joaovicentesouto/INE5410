@@ -18,12 +18,11 @@
 typedef unsigned char cell_t;
 
 // Variáveis goblais
-unsigned int amount_of_threads;
 cell_t ** prev, next, tmp;
 
-struct Submatrix {
+struct {
   int minor_i, minor_j, major_i, major_j;
-};
+} Submatrix;
 
 //! Calcula divisão das threads
 /*  Calcula a divisão da matriz de forma mais adequada
@@ -32,16 +31,15 @@ struct Submatrix {
  *  Mas será que precisa de mutex? Cada thread escreve em
  *  um lugar diferente.
  */
-void division_of_work(int number_threads, int &row, int &col) {
-  int i=number_threads, j=1;
-  while (i >= j) {
-    if (i*j == number_threads) {
-      row = i;
-      col = j;
-    }
-    --i;
-    ++j;
-  }
+void division_of_work(int max_threads, int& thr_per_row, int& thr_per_col) {
+  thr_per_row = max_threads;
+  thr_per_col = 1;
+  for (int i = 1; i <= max_threads/2; i++)
+    for (int j = sqrt(max_threads); j <= max_threads; j++)
+      if (i*j == max_threads && abs(i-j) < abs(thr_per_row-thr_per_col)) {
+          thr_per_row = i;
+          thr_per_col = j;
+      }
 }
 
 /* return the number of on cells adjacent to the i,j cell */
@@ -79,31 +77,7 @@ void thread_play(void *arg) {
 }
 
 void play(cell_t ** board, cell_t ** newboard, int size) {
-  int row, col, tmp, n_row, n_col;
-  pthread_t threads[amount_of_threads];
 
-  division_of_work(amount_of_threads, row, col);
-  tmp = size/row;
-  n_row = tmp * row == size? tmp : tmp+1;
-  tmp = size/col;
-  n_col = tmp * col == size? tmp : tmp+1;
-
-  for (int t = 0; t < amount_of_threads; ++t) {
-    int condition;
-    struct Submatrix sub;
-
-    sub.minor_i = ((t%col)%row)*n_row;
-    condition = ((t%col+1)%row)*n_row;
-    sub.major_i = condition <= size? condition : size;
-    sub.minor_j = (t%col)*n_col;
-    condition = (t%col+1)*n_col;
-    sub.major_j = condition <= size? condition : size;
-    pthread_create(&threads[i], NULL, thread_play, (*void) &sub);
-  }
-
-  for (int t = 0; t < amount_of_threads; ++t) {
-    pthread_join(threads[i], NULL);
-  }
 }
 
 cell_t ** allocate_board(int size) {
@@ -154,7 +128,7 @@ void read_file(FILE * f, cell_t ** board, int size) {
 
 int main(int argc, char * argv[]) {
 
-  amount_of_threads = argc > 1? atoi(argv[1]) : 1;
+  int max_threads = argc > 1? atoi(argv[1]) : 1;
 
   // Cria tabuleiro e carrega células
   int size, steps;
@@ -172,9 +146,45 @@ int main(int argc, char * argv[]) {
   print(prev,size);
   #endif
 
+  // Parâmetros iniciais para cada threads
+  int thr_per_row, thr_per_col, n_row, n_col;
+  division_of_work(amount_of_threads, thr_per_row, thr_per_col);
+  n_row = (int) n/row;
+  n_row = n_row*row == n? n_row : n_row+1;
+  n_col = (int) n/col;
+  n_col = n_col*col == n? n_col : n_col+1;
+
   // Cálculo das gerações
   for (i=0; i<steps; i++) {
-    play (prev,next,size);
+
+    pthread_t threads[amount_of_threads];
+
+    // For para criar todas as threads.
+    // Cada threads tem sua submatriz.
+    int count = 0; // Auxiliar
+    for (int k = 0; k < max_threads; ++k) {
+      struct Submatrix sub;
+      count = k%col == 0 && k!=0? count+1 : count;
+
+      // Linha inicial e final
+      sub.minor_i = (count%row)*n_row;
+      int major_i = (count%row+1)*n_row-1;
+      sub.major_i = major_i < n? major_i : n-1;
+
+      // Coluna inicial e final
+      sub.minor_j = (k%col)*n_col;
+      int major_j = (k%col+1)*n_col-1;
+      sub.major_j = major_j < n? major_j : n-1;
+
+      // Cria threads para processar a submatriz
+      pthread_create(&threads[i], NULL, thread_play, (*void) &sub);
+    }
+
+    for (int t = 0; t < amount_of_threads; ++t) {
+      pthread_join(threads[i], NULL);
+    }
+
+    free(threads);
 
     #ifdef DEBUG
     printf("%d\n----------\n", i + 1);

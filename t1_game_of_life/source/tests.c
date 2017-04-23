@@ -2,21 +2,24 @@
 #include <stdlib.h>
 #include "stdio.h"
 #include "math.h"
-#define  MAX_THREADS 10
+#define  MAX_THREADS 4
 
 int main(int argc, char * argv[]) {
 
-    int row, n_row, col, n_col, count=0, n=20;
+    int row, col;
 
     row = MAX_THREADS;
     col = 1;
 
-    for (int i=1; i<=MAX_THREADS/2; i++)
-      for (int j=(int)sqrt(MAX_THREADS); j<=MAX_THREADS; j++)
+    for (int i = 1; i <= MAX_THREADS/2; i++) {
+      for (int j = sqrt(MAX_THREADS); j <= MAX_THREADS; j++)
         if (i*j == MAX_THREADS && abs(i-j) < abs(row-col)) {
             row = i;
             col = j;
         }
+    }
+
+    int n_row, n_col, count=0, n=30;
 
     n_row = (int) n/row;
     n_row = n_row*row == n? n_row : n_row+1;
