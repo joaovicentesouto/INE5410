@@ -12,6 +12,13 @@
 * means on, space means off.
 *
 */
+
+/*  Alguns aspectos e problemas ainda não vistos ou solucionados:
+ *  - Com a matriz muito pequena e um numero grande threads (11x11 com 7 threads)
+ *    ocorre de mais de uma thread calcular a mesma linha.
+ *  - É possível otimizar em outros aspectos? Na hora de alocar e desalocar?
+ *    Na hora de ler?
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
