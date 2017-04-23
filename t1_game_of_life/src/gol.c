@@ -78,10 +78,12 @@ void play(void *arg) {
   pthread_exit(NULL);
 }
 
-void allocate_board(cell_t ** board, int size) {
-  board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  for (int i=0; i<size; i++)
+cell_t ** allocate_board(int size) {
+  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
+  int	i;
+  for (i=0; i<size; i++)
     board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
+  return board;
 }
 
 void free_board(cell_t ** board, int size) {
@@ -118,6 +120,7 @@ void read_file(FILE * f, cell_t ** board, int size) {
     for (i=0; i<size; i++)
       board[i][j] = s[i] == 'x';
   }
+  free(s);
 }
 
 int main(int argc, char * argv[]) {
@@ -130,16 +133,10 @@ int main(int argc, char * argv[]) {
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
-  allocate_board(prev, size);
-
-  prev[0][0] = 0;
-  printf("prev00 = %d\n", prev[0][0]);
-  printf("antes de ler para prev\n");
+  prev = allocate_board(size);
   read_file(f, prev, size);
-  printf("depois de ler para prev\n");
-
   fclose(f);
-  allocate_board(next, size);
+  next = allocate_board(size);
 
   #ifdef DEBUG
   printf("Initial:\n");
@@ -156,6 +153,12 @@ int main(int argc, char * argv[]) {
   size_col = (int) size / thr_per_col;
   size_col = size_col * thr_per_col == size ? size_col : size_col+1;
 
+  #ifdef DEBUG
+  printf("Divisão das linhas: %d\n", thr_per_row);
+  printf("Divisão das colunas: %d\n", thr_per_col);
+  printf("Tamanho relativo de cada submatriz: %d x %d\n\n ", size_row, size_col);
+  #endif
+
   // Cálculo das gerações
   for (int i=0; i<steps; i++) {
 
@@ -164,23 +167,32 @@ int main(int argc, char * argv[]) {
     // For para criar todas as threads.
     // Cada threads tem sua submatriz.
     int count, k = 0; // Auxiliar
-    struct Submatrix *sub;
     for (k = 0; k < max_threads; k++) {
 
-      sub = malloc(sizeof(struct Submatrix));
+      int tmp;
+      struct Submatrix *sub = malloc(sizeof(struct Submatrix));
 
       count = k%thr_per_col==0 && k!=0 ? count+1 : count;
       // Linha inicial e final
-      sub->minor_i = (count%thr_per_row) * size_row;
-      int major_i = (count%thr_per_row + 1) * size_row - 1;
-      sub->major_i = major_i < size ? major_i : size-1;
+      tmp = (count%thr_per_row) * size_row;
+      sub->minor_i = tmp < size ? tmp : size-1;
+      tmp = (count%thr_per_row + 1) * size_row - 1;
+      sub->major_i = tmp < size ? tmp : size-1;
 
       // Coluna inicial e final
-      sub->minor_j = (k%thr_per_col) * size_col;
-      int major_j = (k%thr_per_col + 1) * size_col - 1;
-      sub->major_j = major_j < size ? major_j : size-1;
+      tmp = (k%thr_per_col) * size_col;
+      sub->minor_j = tmp < size ? tmp : size-1;
+      tmp = (k%thr_per_col + 1) * size_col - 1;
+      sub->major_j = tmp < size ? tmp : size-1;
 
       sub->total_size = size;
+
+      #ifdef DEBUG
+      printf("thread #%d\n", k);
+      printf("minor_i:%d e major_i:%d\n", sub->minor_i, sub->major_i);
+      printf("minor_j:%d e major_j:%d\n\n", sub->minor_j, sub->major_j);
+      #endif
+
       // Cria threads para processar a submatriz
       pthread_create(&threads[k], NULL, play, (void *) sub);
     }
@@ -188,8 +200,6 @@ int main(int argc, char * argv[]) {
     for (k = 0; k < max_threads; k++) {
       pthread_join(threads[k], NULL);
     }
-
-    free(threads);
 
     #ifdef DEBUG
     printf("%d\n----------\n", i + 1);
