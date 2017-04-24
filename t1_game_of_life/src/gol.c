@@ -41,7 +41,7 @@ struct Submatrix{
 void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col) {
   *thr_per_row = max_threads;
   *thr_per_col = 1;
-  for (int i = 1; i <= max_threads/2; i++)
+  for (int i = 1; i <= sqrt(max_threads); i++)
     for (int j = sqrt(max_threads); j <= max_threads; j++)
       if (i*j == max_threads && abs(i-j) < abs(*thr_per_row-*thr_per_col)) {
           *thr_per_row = i;
@@ -169,6 +169,7 @@ int main(int argc, char * argv[]) {
   // Cálculo das gerações
   for (int i=0; i<steps; i++) {
 
+    //printf("Geração:%d\n", i);
     pthread_t threads[max_threads];
 
     // For para criar todas as threads.

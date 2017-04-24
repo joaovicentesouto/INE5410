@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "stdio.h"
 #include "math.h"
-#define  MAX_THREADS 7
+#define  MAX_THREADS 48
 #define  SIZE 11
 
 int main(int argc, char * argv[]) {
@@ -12,7 +12,7 @@ int main(int argc, char * argv[]) {
     row = MAX_THREADS;
     col = 1;
 
-    for (int i = 1; i <= MAX_THREADS/2; i++) {
+    for (int i = 1; i <= sqrt(MAX_THREADS); i++) {
       for (int j = sqrt(MAX_THREADS); j <= MAX_THREADS; j++)
         if (i*j == MAX_THREADS && abs(i-j) < abs(row-col)) {
             row = i;
