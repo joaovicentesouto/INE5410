@@ -18,6 +18,10 @@
  *    ocorre de mais de uma thread calcular a mesma linha.
  *  - É possível otimizar em outros aspectos? Na hora de alocar e desalocar?
  *    Na hora de ler?
+ *  - IMPORTANTE: Estudar a idéia do Ricardo que é criar apenas uma vez
+ *    as threads e usar semáforos pra fazer com que elas trabalhem quando
+ *    a thread main informar.
+ *  - IMPORTANTE: melhorar a legibilidade do código.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,108 +31,19 @@ typedef unsigned char cell_t;
 
 // Variáveis goblais
 cell_t **prev, **next, **tmp;
+// Usar typedef na Submatrix?
 struct Submatrix{
   int minor_i, minor_j, major_i, major_j, total_size;
 };
 
-//! Calcula divisão das threads
-/*  Calcula a divisão da matriz de forma mais adequada
- *  procurando o a menor diferença entre as sub-matrizes.
- *  row+col-2 == quantidade de mutex que será necessário.
- *  Mas será que precisa de mutex? Cada thread escreve em
- *  um lugar diferente.
- */
-void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col) {
-  *thr_per_row = max_threads;
-  *thr_per_col = 1;
-  for (int i = 1; i <= sqrt(max_threads); i++)
-    for (int j = sqrt(max_threads); j <= max_threads; j++)
-      if (i*j == max_threads && abs(i-j) < abs(*thr_per_row-*thr_per_col)) {
-          *thr_per_row = i;
-          *thr_per_col = j;
-      }
-}
-
-/* return the number of on cells adjacent to the i,j cell */
-int adjacent_to(cell_t ** board, int size, int i, int j) {
-
-  int	count=0;
-  // Limits
-  int sk = (i>0) ? i-1 : i;
-  int ek = (i+1 < size) ? i+1 : i;
-  int sl = (j>0) ? j-1 : j;
-  int el = (j+1 < size) ? j+1 : j;
-
-  for (int k=sk; k<=ek; k++)
-    for (int l=sl; l<=el; l++)
-      count+=board[k][l];
-  count-=board[i][j]; // Your own decreased cell position
-
-  return count;
-}
-
-//! Play de uma thread
-void play(void *arg) {
-  struct Submatrix *sub = (struct Submatrix*) arg;
-  int	a;
-  /* for each cell, apply the rules of Life */
-  for (int i=sub->minor_i; i<=sub->major_i; i++) {
-    for (int j=sub->minor_j; j<=sub->major_j; j++) {
-      a = adjacent_to(prev, sub->total_size, i, j);
-      if (a == 2) next[i][j] = prev[i][j]; // Still the same
-      if (a == 3) next[i][j] = 1;           // It's Alive!!!
-      if (a < 2) next[i][j] = 0;            // Dies
-      if (a > 3) next[i][j] = 0;            // Dies
-    }
-  }
-  free(sub);
-  pthread_exit(NULL);
-}
-
-cell_t ** allocate_board(int size) {
-  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  int	i;
-  for (i=0; i<size; i++)
-    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
-  return board;
-}
-
-void free_board(cell_t ** board, int size) {
-  for (int i=0; i<size; i++)
-    free(board[i]);
-  free(board);
-}
-
-/* print the life board */
-void print(cell_t ** board, int size) {
-  /* for each row */
-  for (int j=0; j<size; j++) {
-    /* print each column position... */
-    for (int i=0; i<size; i++)
-    printf("%c", board[i][j] ? 'x' : ' ');
-    /* followed by a carriage return */
-    printf("\n");
-  }
-}
-
-/* read a file into the life board */
-void read_file(FILE * f, cell_t ** board, int size) {
-  int	i, j;
-  char	*s = (char *) malloc(size+10);
-
-  /* read the first new line (it will be ignored) */
-  fgets(s, size+10,f);
-
-  /* read the life board */
-  for (j=0; j<size; j++) {
-    /* get a string */
-    fgets(s, size+10,f);
-    /* copy the string to the life board */
-    for (i=0; i<size; i++)
-      board[i][j] = s[i] == 'x';
-  }
-  free(s);
-}
+// Declaração das funções. Implementação após main()
+void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col);
+int adjacent_to(cell_t ** board, int size, int i, int j);
+void* play(void *arg);
+cell_t ** allocate_board(int size);
+void free_board(cell_t ** board, int size);
+void print(cell_t ** board, int size);
+void read_file(FILE * f, cell_t ** board, int size);
 
 int main(int argc, char * argv[]) {
 
@@ -144,6 +59,11 @@ int main(int argc, char * argv[]) {
   read_file(f, prev, size);
   fclose(f);
   next = allocate_board(size);
+
+  #ifdef RESULT
+  printf("Initial:\n");
+  print(prev,size);
+  #endif
 
   #ifdef DEBUG
   printf("Initial:\n");
@@ -226,4 +146,103 @@ int main(int argc, char * argv[]) {
 
   free_board(prev,size); // Desaloca memória
   free_board(next,size); // Desaloca memória
+}
+
+//! Calcula divisão das threads
+/*  Calcula a divisão da matriz de forma mais adequada
+ *  procurando o a menor diferença entre as sub-matrizes.
+ *  row+col-2 == quantidade de mutex que será necessário.
+ *  Mas será que precisa de mutex? Cada thread escreve em
+ *  um lugar diferente.
+ */
+void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col) {
+  *thr_per_row = max_threads;
+  *thr_per_col = 1;
+  for (int i = 1; i <= sqrt(max_threads); i++)
+    for (int j = sqrt(max_threads); j <= max_threads; j++)
+      if (i*j == max_threads && abs(i-j) < abs(*thr_per_row-*thr_per_col)) {
+          *thr_per_row = i;
+          *thr_per_col = j;
+      }
+}
+
+/* return the number of on cells adjacent to the i,j cell */
+int adjacent_to(cell_t ** board, int size, int i, int j) {
+
+  int	count=0;
+  // Limits
+  int sk = (i>0) ? i-1 : i;
+  int ek = (i+1 < size) ? i+1 : i;
+  int sl = (j>0) ? j-1 : j;
+  int el = (j+1 < size) ? j+1 : j;
+
+  for (int k=sk; k<=ek; k++)
+    for (int l=sl; l<=el; l++)
+      count+=board[k][l];
+  count-=board[i][j]; // Your own decreased cell position
+
+  return count;
+}
+
+//! Play de uma thread
+void* play(void *arg) {
+  struct Submatrix *sub = (struct Submatrix*) arg;
+  int	a;
+  /* for each cell, apply the rules of Life */
+  for (int i=sub->minor_i; i<=sub->major_i; i++) {
+    for (int j=sub->minor_j; j<=sub->major_j; j++) {
+      a = adjacent_to(prev, sub->total_size, i, j);
+      if (a == 2) next[i][j] = prev[i][j]; // Still the same
+      if (a == 3) next[i][j] = 1;           // It's Alive!!!
+      if (a < 2) next[i][j] = 0;            // Dies
+      if (a > 3) next[i][j] = 0;            // Dies
+    }
+  }
+  free(sub);
+  pthread_exit(NULL);
+}
+
+cell_t ** allocate_board(int size) {
+  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
+  int	i;
+  for (i=0; i<size; i++)
+    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
+  return board;
+}
+
+void free_board(cell_t ** board, int size) {
+  for (int i=0; i<size; i++)
+    free(board[i]);
+  free(board);
+}
+
+/* print the life board */
+void print(cell_t ** board, int size) {
+  /* for each row */
+  for (int j=0; j<size; j++) {
+    /* print each column position... */
+    for (int i=0; i<size; i++)
+    printf("%c", board[i][j] ? 'x' : ' ');
+    /* followed by a carriage return */
+    printf("\n");
+  }
+}
+
+/* read a file into the life board */
+void read_file(FILE * f, cell_t ** board, int size) {
+  int	i, j;
+  char	*s = (char *) malloc(size+10);
+
+  /* read the first new line (it will be ignored) */
+  fgets(s, size+10,f);
+
+  /* read the life board */
+  for (j=0; j<size; j++) {
+    /* get a string */
+    fgets(s, size+10,f);
+    /* copy the string to the life board */
+    for (i=0; i<size; i++)
+      board[i][j] = s[i] == 'x';
+  }
+  free(s);
 }
