@@ -32,12 +32,17 @@ typedef unsigned char cell_t;
 // Variáveis goblais
 cell_t **prev, **next, **tmp;
 // Usar typedef na Submatrix?
-struct Submatrix{
+typedef struct {
   int minor_i, minor_j, major_i, major_j, total_size;
-};
+} Submatrix;
 
 // Declaração das funções. Implementação após main()
-void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col);
+void division_of_work(int max_threads,
+                      int size,
+                      int *row_per_thr,
+                      int *col_per_thr,
+                      int *height,
+                      int *width);
 int adjacent_to(cell_t ** board, int size, int i, int j);
 void* play(void *arg);
 cell_t ** allocate_board(int size);
@@ -71,19 +76,13 @@ int main(int argc, char * argv[]) {
   #endif
 
   // Parâmetros iniciais para cada threads
-  int thr_per_row, thr_per_col, size_row, size_col;
-  division_of_work(max_threads, &thr_per_row, &thr_per_col);
-  // Linhas
-  size_row = (int) size / thr_per_row;
-  size_row = size_row * thr_per_row == size ? size_row : size_row+1;
-  // Colunas
-  size_col = (int) size / thr_per_col;
-  size_col = size_col * thr_per_col == size ? size_col : size_col+1;
+  int row_per_thr, col_per_thr, height, width;
+  division_of_work(max_threads, size, &row_per_thr, &col_per_thr, &height, &width);
 
   #ifdef DEBUG
-  printf("Divisão das linhas: %d\n", thr_per_row);
-  printf("Divisão das colunas: %d\n", thr_per_col);
-  printf("Tamanho relativo de cada submatriz: %d x %d\n\n ", size_row, size_col);
+  printf("Divisão das linhas: %d\n", row_per_thr);
+  printf("Divisão das colunas: %d\n", col_per_thr);
+  printf("Tamanho relativo de cada submatriz: %d x %d\n\n ", height, width);
   #endif
 
   // Cálculo das gerações
@@ -98,27 +97,26 @@ int main(int argc, char * argv[]) {
     for (k = 0; k < max_threads; k++) {
 
       int tmp;
-      struct Submatrix *sub = malloc(sizeof(struct Submatrix));
+      Submatrix *sub = malloc(sizeof(Submatrix));
 
-      count = k%thr_per_col==0 && k!=0 ? count+1 : count;
+      count = k%col_per_thr==0 && k!=0 ? count+1 : count;
       // Linha inicial e final
-      tmp = (count%thr_per_row) * size_row;
-      sub->minor_i = tmp < size ? tmp : size-1;
-      tmp = (count%thr_per_row + 1) * size_row - 1;
-      sub->major_i = tmp < size ? tmp : size-1;
+      tmp = (count%row_per_thr) * height;
+      sub->minor_i = tmp < size ? tmp : size - 1;
+      tmp = (count%row_per_thr + 1) * height - 1;
+      sub->major_i = tmp < size ? tmp : size - 1;
 
       // Coluna inicial e final
-      tmp = (k%thr_per_col) * size_col;
+      tmp = (k%col_per_thr) * width;
       sub->minor_j = tmp < size ? tmp : size-1;
-      tmp = (k%thr_per_col + 1) * size_col - 1;
+      tmp = (k%col_per_thr + 1) * width - 1;
       sub->major_j = tmp < size ? tmp : size-1;
 
       sub->total_size = size;
 
       #ifdef DEBUG
-      printf("thread #%d\n", k);
-      printf("minor_i:%d e major_i:%d\n", sub->minor_i, sub->major_i);
-      printf("minor_j:%d e major_j:%d\n\n", sub->minor_j, sub->major_j);
+      printf("Thread #%d: i:[%d, %d] | j:[%d, %d]\n", k,
+             sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
       #endif
 
       // Cria threads para processar a submatriz
@@ -155,15 +153,31 @@ int main(int argc, char * argv[]) {
  *  Mas será que precisa de mutex? Cada thread escreve em
  *  um lugar diferente.
  */
-void division_of_work(int max_threads, int *thr_per_row, int *thr_per_col) {
-  *thr_per_row = max_threads;
-  *thr_per_col = 1;
-  for (int i = 1; i <= sqrt(max_threads); i++)
-    for (int j = sqrt(max_threads); j <= max_threads; j++)
-      if (i*j == max_threads && abs(i-j) < abs(*thr_per_row-*thr_per_col)) {
-          *thr_per_row = i;
-          *thr_per_col = j;
+void division_of_work(int max_threads, int size,
+                      int *row_per_thr, int *col_per_thr,
+                      int *height, int *width)
+{
+  *row_per_thr = max_threads;
+  *col_per_thr = 1;
+  for (int i = 1; i <= sqrt(max_threads); i++) {
+    for (int j = sqrt(max_threads); j <= max_threads; j++) {
+      if (i*j == max_threads && abs(i-j) < abs(*row_per_thr-*col_per_thr)) {
+          *row_per_thr = i;
+          *col_per_thr = j;
       }
+    }
+  }
+
+  // Altura
+  float precision = size / *row_per_thr;
+  *height = (int) precision;
+  if (*height * *row_per_thr != size)
+    *height = precision - *height >= 0.5 ? *height : *height+1;
+  // Largura
+  precision = size / *col_per_thr;
+  *width = (int) precision;
+  if (*width * *col_per_thr != size)
+    *width = precision - *width >= 0.5 ? *width : *width+1;
 }
 
 /* return the number of on cells adjacent to the i,j cell */
@@ -186,7 +200,7 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
 
 //! Play de uma thread
 void* play(void *arg) {
-  struct Submatrix *sub = (struct Submatrix*) arg;
+  Submatrix *sub = (Submatrix*) arg;
   int	a;
   /* for each cell, apply the rules of Life */
   for (int i=sub->minor_i; i<=sub->major_i; i++) {
