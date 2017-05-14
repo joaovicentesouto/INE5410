@@ -29,9 +29,8 @@
 #include <math.h>
 typedef unsigned char cell_t;
 
-// Variáveis goblais
+// Variáveis goblais e estruturas
 cell_t **prev, **next, **tmp;
-// Usar typedef na Submatrix?
 typedef struct {
   int minor_i, minor_j, major_i, major_j, total_size;
 } Submatrix;
@@ -57,7 +56,7 @@ int main(int argc, char * argv[]) {
 
   // Cria tabuleiro e carrega células
   int size, steps;
-  FILE    *f;
+  FILE *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
   prev = allocate_board(size);
@@ -86,30 +85,30 @@ int main(int argc, char * argv[]) {
   #endif
 
   // Cálculo das gerações
-  for (int i=0; i<steps; i++) {
+  for (int i = 0; i < steps; i++) {
 
     //printf("Geração:%d\n", i);
     pthread_t threads[max_threads];
 
     // For para criar todas as threads.
     // Cada threads tem sua submatriz.
-    int count, k = 0; // Auxiliar
-    for (k = 0; k < max_threads; k++) {
+    int count; // Auxiliar
+    for (int k = 0; k < max_threads; k++) {
 
       int tmp;
       Submatrix *sub = malloc(sizeof(Submatrix));
 
-      count = k%col_per_thr==0 && k!=0 ? count+1 : count;
+      count = (k % col_per_thr) == 0 && k != 0 ? count+1 : count;
       // Linha inicial e final
-      tmp = (count%row_per_thr) * height;
-      sub->minor_i = tmp < size ? tmp : size - 1;
-      tmp = (count%row_per_thr + 1) * height - 1;
-      sub->major_i = tmp < size ? tmp : size - 1;
+      tmp = (count % row_per_thr) * height;
+      sub->minor_i = tmp < size ? tmp : size-1;
+      tmp = (count % row_per_thr + 1) * height - 1;
+      sub->major_i = tmp < size ? tmp : size-1;
 
       // Coluna inicial e final
-      tmp = (k%col_per_thr) * width;
+      tmp = (k % col_per_thr) * width;
       sub->minor_j = tmp < size ? tmp : size-1;
-      tmp = (k%col_per_thr + 1) * width - 1;
+      tmp = (k % col_per_thr + 1) * width - 1;
       sub->major_j = tmp < size ? tmp : size-1;
 
       sub->total_size = size;
@@ -123,7 +122,7 @@ int main(int argc, char * argv[]) {
       pthread_create(&threads[k], NULL, play, (void *) sub);
     }
 
-    for (k = 0; k < max_threads; k++) {
+    for (int k = 0; k < max_threads; k++) {
       pthread_join(threads[k], NULL);
     }
 
@@ -182,20 +181,18 @@ void division_of_work(int max_threads, int size,
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to(cell_t ** board, int size, int i, int j) {
-
-  int	count=0;
+  int	living_cells=0;
   // Limits
-  int sk = (i>0) ? i-1 : i;
-  int ek = (i+1 < size) ? i+1 : i;
-  int sl = (j>0) ? j-1 : j;
-  int el = (j+1 < size) ? j+1 : j;
+  int minor_k = (i>0) ? i-1 : i;
+  int major_k = (i+1 < size) ? i+1 : i;
+  int minor_l = (j>0) ? j-1 : j;
+  int major_l = (j+1 < size) ? j+1 : j;
 
-  for (int k=sk; k<=ek; k++)
-    for (int l=sl; l<=el; l++)
-      count+=board[k][l];
-  count-=board[i][j]; // Your own decreased cell position
-
-  return count;
+  for (int k = minor_k; k <= major_k; k++)
+    for (int l = minor_l; l <= major_l; l++)
+      living_cells += board[k][l];
+  living_cells -= board[i][j]; // Your own decreased cell position
+  return living_cells;
 }
 
 //! Play de uma thread
@@ -208,55 +205,100 @@ void* play(void *arg) {
       a = adjacent_to(prev, sub->total_size, i, j);
       if (a == 2) next[i][j] = prev[i][j]; // Still the same
       if (a == 3) next[i][j] = 1;           // It's Alive!!!
-      if (a < 2) next[i][j] = 0;            // Dies
-      if (a > 3) next[i][j] = 0;            // Dies
+      if (a < 2) next[i][j] = 0;            // Die
+      if (a > 3) next[i][j] = 0;            // Die
     }
   }
   free(sub);
   pthread_exit(NULL);
 }
 
+/* Versão usando semáforos
+void* worker_thread(void *arg) {
+  // Não tem como saber se o mestre ao liberar todas as threads
+  // pode tentar dar lock antes mesmo das workers?????????????
+  if (WAKE_UP == MAX_THREADS-1) {
+    WAKE_UP = 0;
+    pthread_mutex_lock(&wait_calculation);
+  }
+  Submatrix *sub = (Submatrix*) arg;
+  int	a;
+  sem_up(&game_calculation);
+
+  do {
+    for (int i=sub->minor_i; i<=sub->major_i; i++) {
+      for (int j=sub->minor_j; j<=sub->major_j; j++) {
+        a = adjacent_to(prev, sub->total_size, i, j);
+        if (a == 2) next[i][j] = prev[i][j]; // Still the same
+        if (a == 3) next[i][j] = 1;           // It's Alive!!!
+        if (a < 2) next[i][j] = 0;            // Die
+        if (a > 3) next[i][j] = 0;            // Die
+      }
+    }
+
+    pthread_mutex_lock(&wake_up_the_master);
+    WAKE_UP++;
+    if (WAKE_UP == MAX_THREADS-1)
+      pthread_mutex_unlock(&wait_calculation);
+    pthread_mutex_unlock(&wake_up_the_master);
+
+    sem_up(&game_calculation);
+
+  } while(!EXIT_GAME);
+
+  free(sub);
+  pthread_exit(NULL);
+}
+
+void* controller_thread() {
+  int i, j;
+  for (i = 0; i < STEPS; i++) {
+    for (j = 0; j < MAX_THREADS; j++)
+      sem_down(&game_calculation);
+    pthread_mutex_lock(&wait_calculation);
+
+    tmp = next;
+    next = prev;
+    prev = tmp;
+  }
+
+  EXIT_GAME = true;
+  for (j = 0; j < MAX_THREADS; j++)
+    sem_down(&game_calculation);
+  pthread_exit(NULL);
+} */
+
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  int	i;
-  for (i=0; i<size; i++)
+  for (int i = 0; i < size; i++)
     board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
   return board;
 }
 
 void free_board(cell_t ** board, int size) {
-  for (int i=0; i<size; i++)
+  for (int i = 0; i < size; i++)
     free(board[i]);
   free(board);
 }
 
 /* print the life board */
 void print(cell_t ** board, int size) {
-  /* for each row */
-  for (int j=0; j<size; j++) {
-    /* print each column position... */
-    for (int i=0; i<size; i++)
-    printf("%c", board[i][j] ? 'x' : ' ');
-    /* followed by a carriage return */
+  for (int j = 0; j < size; j++) {
+    for (int i = 0; i < size; i++)
+      printf("%c", board[i][j] ? 'x' : ' ');
     printf("\n");
   }
 }
 
 /* read a file into the life board */
 void read_file(FILE * f, cell_t ** board, int size) {
-  int	i, j;
   char	*s = (char *) malloc(size+10);
+  fgets(s, size+10,f); // Ignore first line
 
-  /* read the first new line (it will be ignored) */
-  fgets(s, size+10,f);
-
-  /* read the life board */
-  for (j=0; j<size; j++) {
-    /* get a string */
-    fgets(s, size+10,f);
-    /* copy the string to the life board */
-    for (i=0; i<size; i++)
-      board[i][j] = s[i] == 'x';
+  for (int j = 0; j < size; j++) {
+    fgets(s, size+10,f); // Gets new line
+    for (int i = 0; i < size; i++)
+      board[i][j] = s[i] == 'x'; // Completing the line board
   }
   free(s);
 }
