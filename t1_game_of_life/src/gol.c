@@ -21,7 +21,7 @@
 typedef unsigned char cell_t;
 pthread_mutex_t critical_section;
 sem_t game_calculation;
-int MAX_THREADS, STEPS, SIZE, ITERATOR;
+int MAX_THREADS, STEPS, SIZE, ITERATOR = 0, LAST = 0;
 
 typedef struct {
   int row_per_thr, col_per_thr, height, width;
@@ -88,26 +88,43 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
 
 void* play(void* arg) {
   Matrix* sub = (Matrix*) arg;
-
   int	i, j, a;
-  for (i = sub->minor_i; i <= sub->major_i; i++) {
-    for (j = sub->minor_j; j <= sub->major_j; j++) {
-      a = adjacent_to(prev, sub->total_size, i, j);
-      if (a == 2) next[i][j] = prev[i][j]; // Still the same
-      if (a == 3) next[i][j] = 1;           // It's Alive!!!
-      if (a < 2) next[i][j] = 0;            // Die
-      if (a > 3) next[i][j] = 0;            // Die
+
+  while (ITERATOR < STEPS) {
+    for (i = sub->minor_i; i <= sub->major_i; i++) {
+      for (j = sub->minor_j; j <= sub->major_j; j++) {
+        a = adjacent_to(prev, sub->total_size, i, j);
+        if (a == 2) next[i][j] = prev[i][j]; // Still the same
+        if (a == 3) next[i][j] = 1;           // It's Alive!!!
+        if (a < 2) next[i][j] = 0;            // Die
+        if (a > 3) next[i][j] = 0;            // Die
+      }
     }
+
+    pthread_mutex_lock(&critical_section);
+    LAST++;
+    if (LAST == MAX_THREADS) {
+      LAST = 0;
+      ITERATOR++;
+
+      #ifdef DEBUG
+      printf("%d\n----------\n", i + 1);
+      print(next,size);
+      #endif
+
+      tmp = next;
+      next = prev;
+      prev = tmp;
+
+      for (i = 0; i < MAX_THREADS; i++)
+        sem_post(&game_calculation);
+    }
+    pthread_mutex_unlock(&critical_section);
+
+    sem_wait(&game_calculation);
   }
 
-  #ifdef DEBUG
-  printf("%d\n----------\n", i + 1);
-  print(next,size);
-  #endif
-
-  tmp = next;
-  next = prev;
-  prev = tmp;
+  pthread_exit(NULL);
 }
 
 /* print the life board */
