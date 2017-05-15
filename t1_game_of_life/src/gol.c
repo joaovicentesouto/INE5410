@@ -20,7 +20,7 @@
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
-pthread_mutex_t critical_section;
+pthread_mutex_t critical_section, barrier;
 sem_t game_calculation;
 int MAX_THREADS, STEPS, SIZE, ITERATOR = 0, LAST = 0;
 
@@ -57,41 +57,44 @@ void division_of_work(Rules* r)
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
   int	i;
-  for (i=0; i<size; i++)
+  for (i = 0; i < size; i++)
     board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
   return board;
 }
 
 void free_board(cell_t ** board, int size) {
   int i;
-  for (i=0; i<size; i++)
+  for (i = 0; i < size; i++)
     free(board[i]);
   free(board);
 }
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to(cell_t ** board, int size, int i, int j) {
-  int	k, l, count=0;
+  int	k, l, living_cells = 0;
 
   // Limits
-  int sk = (i>0) ? i-1 : i;
-  int ek = (i+1 < size) ? i+1 : i;
-  int sl = (j>0) ? j-1 : j;
-  int el = (j+1 < size) ? j+1 : j;
+  int minor_k = (i>0) ? i-1 : i;
+  int major_k = (i+1 < size) ? i+1 : i;
+  int minor_l = (j>0) ? j-1 : j;
+  int major_l = (j+1 < size) ? j+1 : j;
 
-  for (k=sk; k<=ek; k++)
-    for (l=sl; l<=el; l++)
-      count+=board[k][l];
-  count-=board[i][j]; // Your own decreased cell position
+  for (k = minor_k; k <= major_k; k++)
+    for (l = minor_l; l <= major_l; l++)
+      living_cells += board[k][l];
+  living_cells -= board[i][j]; // Your own decreased cell position
 
-  return count;
+  return living_cells;
 }
 
 void* play(void* arg) {
   Matrix* sub = (Matrix*) arg;
   int	i, j, a;
 
+  pthread_mutex_lock(&critical_section);
   while (ITERATOR < STEPS) {
+    pthread_mutex_unlock(&critical_section);
+
     for (i = sub->minor_i; i <= sub->major_i; i++) {
       for (j = sub->minor_j; j <= sub->major_j; j++) {
         a = adjacent_to(prev, SIZE, i, j);
@@ -122,8 +125,10 @@ void* play(void* arg) {
     }
     pthread_mutex_unlock(&critical_section);
 
+    pthread_mutex_lock(&critical_section);
     sem_wait(&game_calculation);
   }
+  pthread_mutex_unlock(&critical_section);
 
   pthread_exit(NULL);
 }
@@ -162,6 +167,7 @@ void read_file(FILE * f, cell_t ** board, int size) {
 int main(int argc, char * argv[]) {
 
   pthread_mutex_init(&critical_section, NULL);
+  pthread_mutex_init(&barrier, NULL);
   sem_init(&game_calculation, 0, 0); // inicia fechado
 
   MAX_THREADS = argc > 1? atoi(argv[1]) : 1;
@@ -220,5 +226,6 @@ int main(int argc, char * argv[]) {
   free_board(next, SIZE); // Desaloca memória
 
   pthread_mutex_destroy(&critical_section);
+  pthread_mutex_destroy(&barrier);
   sem_destroy(&game_calculation);
 }
