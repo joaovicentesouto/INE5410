@@ -8,7 +8,7 @@
 * or overcrowding
 *
 * In this version, a 2D array of ints is used.  A 1 cell is on, a 0 cell is off.
-* The game plays a number of STEPS (given by the input), printing to the screen each time.  'x' printed
+* The game plays a number of steps (given by the input), printing to the screen each time.  'x' printed
 * means on, space means off.
 *
 */
@@ -26,55 +26,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <math.h>
 typedef unsigned char cell_t;
-typedef enum { false, true } bool;
 
-// Variáveis goblais
+// Variáveis goblais e estruturas
 cell_t **prev, **next, **tmp;
-int WAKE_UP = 0, MAX_THREADS, STEPS;
-bool EXIT_GAME = false;
-
-// Mutexes
-pthread_mutex_t wait_calculation, wake_up_the_master;
-
-// Semáforos
-sem_t game_calculation;
-
-// Estruturas
 typedef struct {
   int minor_i, minor_j, major_i, major_j, total_size;
 } Submatrix;
 
 // Declaração das funções. Implementação após main()
-void division_of_work(int size,
+void division_of_work(int max_threads,
+                      int size,
                       int *row_per_thr,
                       int *col_per_thr,
                       int *height,
                       int *width);
-void* controller_thread(void* arg);
-void* worker_thread(void* arg);
-
 int adjacent_to(cell_t ** board, int size, int i, int j);
+void* play(void *arg);
 cell_t ** allocate_board(int size);
 void free_board(cell_t ** board, int size);
 void print(cell_t ** board, int size);
 void read_file(FILE * f, cell_t ** board, int size);
 
 int main(int argc, char * argv[]) {
-  pthread_mutex_init(&wait_calculation, NULL);
-  pthread_mutex_init(&wake_up_the_master, NULL);
-  sem_init(&game_calculation, 0, 0);
 
-  int MAX_THREADS = argc > 1? atoi(argv[1]) : 1;
-  printf("max_t:%d\n", MAX_THREADS);
+  int max_threads = argc > 1? atoi(argv[1]) : 1;
+  printf("max_t:%d\n", max_threads);
 
   // Cria tabuleiro e carrega células
-  int size, STEPS;
+  int size, steps;
   FILE *f;
   f = stdin;
-  fscanf(f,"%d %d", &size, &STEPS);
+  fscanf(f,"%d %d", &size, &steps);
   prev = allocate_board(size);
   read_file(f, prev, size);
   fclose(f);
@@ -92,7 +76,7 @@ int main(int argc, char * argv[]) {
 
   // Parâmetros iniciais para cada threads
   int row_per_thr, col_per_thr, height, width;
-  division_of_work(size, &row_per_thr, &col_per_thr, &height, &width);
+  division_of_work(max_threads, size, &row_per_thr, &col_per_thr, &height, &width);
 
   #ifdef DEBUG
   printf("Divisão das linhas: %d\n", row_per_thr);
@@ -100,61 +84,65 @@ int main(int argc, char * argv[]) {
   printf("Tamanho relativo de cada submatriz: %d x %d\n\n ", height, width);
   #endif
 
-  //printf("Geração:%d\n", i);
-  pthread_t threads[MAX_THREADS+1];
+  // Cálculo das gerações
+  for (int i = 0; i < steps; i++) {
 
-  // For para criar todas as threads.
-  // Cada threads tem sua submatriz.
-  int k, count = 0; // Auxiliar
-  for (k = 0; k < MAX_THREADS; k++) {
+    //printf("Geração:%d\n", i);
+    pthread_t threads[max_threads];
 
-    int tmp;
-    Submatrix *sub = malloc(sizeof(Submatrix));
+    // For para criar todas as threads.
+    // Cada threads tem sua submatriz.
+    int count; // Auxiliar
+    for (int k = 0; k < max_threads; k++) {
 
-    count = (k % col_per_thr) == 0 && k != 0 ? count+1 : count;
-    printf("xxx\n");
-    // Linha inicial e final
-    tmp = (count % row_per_thr) * height;
-    sub->minor_i = tmp < size ? tmp : size-1;
-    tmp = (count % row_per_thr + 1) * height - 1;
-    sub->major_i = tmp < size ? tmp : size-1;
-    printf("xxx\n");
-    // Coluna inicial e final
-    tmp = (k % col_per_thr) * width;
-    sub->minor_j = tmp < size ? tmp : size-1;
-    tmp = (k % col_per_thr + 1) * width - 1;
-    sub->major_j = tmp < size ? tmp : size-1;
+      int tmp;
+      Submatrix *sub = malloc(sizeof(Submatrix));
 
-    sub->total_size = size;
+      count = (k % col_per_thr) == 0 && k != 0 ? count+1 : count;
+      // Linha inicial e final
+      tmp = (count % row_per_thr) * height;
+      sub->minor_i = tmp < size ? tmp : size-1;
+      tmp = (count % row_per_thr + 1) * height - 1;
+      sub->major_i = tmp < size ? tmp : size-1;
+
+      // Coluna inicial e final
+      tmp = (k % col_per_thr) * width;
+      sub->minor_j = tmp < size ? tmp : size-1;
+      tmp = (k % col_per_thr + 1) * width - 1;
+      sub->major_j = tmp < size ? tmp : size-1;
+
+      sub->total_size = size;
+
+      #ifdef DEBUG
+      printf("Thread #%d: i:[%d, %d] | j:[%d, %d]\n", k,
+             sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
+      #endif
+
+      // Cria threads para processar a submatriz
+      pthread_create(&threads[k], NULL, play, (void *) sub);
+    }
+
+    for (int k = 0; k < max_threads; k++) {
+      pthread_join(threads[k], NULL);
+    }
 
     #ifdef DEBUG
-    printf("Thread #%d: i:[%d, %d] | j:[%d, %d]\n", k,
-           sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
+    printf("%d\n----------\n", i + 1);
+    print(next,size);
     #endif
 
-    // Cria threads trabalhadoras para processar a submatriz
-    pthread_create(&threads[k], NULL, worker_thread, (void *) sub);
+    tmp = next;
+    next = prev;
+    prev = tmp;
   }
-
-  // Thread controladora
-  pthread_create(&threads[MAX_THREADS], NULL, controller_thread, NULL);
-
-  for (k = 0; k <= MAX_THREADS; k++)
-    pthread_join(threads[k], NULL);
 
   #ifdef RESULT
   printf("Final:\n");
   print (prev,size);
   #endif
 
-  free_board(prev,size);
-  free_board(next,size);
-
-  pthread_mutex_destroy(&wait_calculation);
-  pthread_mutex_destroy(&wake_up_the_master);
-  sem_destroy(&game_calculation);
-
-  return 0;
+  free_board(prev,size); // Desaloca memória
+  free_board(next,size); // Desaloca memória
 }
 
 //! Calcula divisão das threads
@@ -164,14 +152,15 @@ int main(int argc, char * argv[]) {
  *  Mas será que precisa de mutex? Cada thread escreve em
  *  um lugar diferente.
  */
-void division_of_work(int size, int *row_per_thr, int *col_per_thr,
+void division_of_work(int max_threads, int size,
+                      int *row_per_thr, int *col_per_thr,
                       int *height, int *width)
 {
-  *row_per_thr = MAX_THREADS;
+  *row_per_thr = max_threads;
   *col_per_thr = 1;
-  for (int i = 1; i <= sqrt(MAX_THREADS); i++) {
-    for (int j = sqrt(MAX_THREADS); j <= MAX_THREADS; j++) {
-      if (i*j == MAX_THREADS && abs(i-j) < abs(*row_per_thr-*col_per_thr)) {
+  for (int i = 1; i <= sqrt(max_threads); i++) {
+    for (int j = sqrt(max_threads); j <= max_threads; j++) {
+      if (i*j == max_threads && abs(i-j) < abs(*row_per_thr-*col_per_thr)) {
           *row_per_thr = i;
           *col_per_thr = j;
       }
@@ -179,14 +168,12 @@ void division_of_work(int size, int *row_per_thr, int *col_per_thr,
   }
 
   // Altura
-  float precision = (float) size / *row_per_thr;
+  float precision = size / *row_per_thr;
   *height = (int) precision;
-
   if (*height * *row_per_thr != size)
     *height = precision - *height >= 0.5 ? *height : *height+1;
-
   // Largura
-  precision = (float) size / *col_per_thr;
+  precision = size / *col_per_thr;
   *width = (int) precision;
   if (*width * *col_per_thr != size)
     *width = precision - *width >= 0.5 ? *width : *width+1;
@@ -208,41 +195,41 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
   return living_cells;
 }
 
-void* controller_thread() {
-  int i, j;
-  pthread_mutex_lock(&wait_calculation); // Primeiro a travar
-
-  for (i = 0; i < STEPS; i++) {
-    for (j = 0; j < MAX_THREADS; j++)
-      sem_post(&game_calculation); // Libera pra calcular
-    pthread_mutex_lock(&wait_calculation); // Espera alguém liberar
-
-    //#ifdef DEBUG
-    //printf("%d\n----------\n", i + 1);
-    //print(next,size);
-    //#endif
-
-    tmp = next;
-    next = prev;
-    prev = tmp;
+//! Play de uma thread
+void* play(void *arg) {
+  Submatrix *sub = (Submatrix*) arg;
+  int	a;
+  /* for each cell, apply the rules of Life */
+  for (int i=sub->minor_i; i<=sub->major_i; i++) {
+    for (int j=sub->minor_j; j<=sub->major_j; j++) {
+      a = adjacent_to(prev, sub->total_size, i, j);
+      if (a == 2) next[i][j] = prev[i][j]; // Still the same
+      if (a == 3) next[i][j] = 1;           // It's Alive!!!
+      if (a < 2) next[i][j] = 0;            // Die
+      if (a > 3) next[i][j] = 0;            // Die
+    }
   }
-
-  EXIT_GAME = true; // Saída das threads do loop
-  for (j = 0; j < MAX_THREADS; j++)
-    sem_post(&game_calculation); // Liberá pra saírem
+  free(sub);
   pthread_exit(NULL);
 }
 
+/* Versão usando semáforos
 void* worker_thread(void *arg) {
-  int	a;
+  // Não tem como saber se o mestre ao liberar todas as threads
+  // pode tentar dar lock antes mesmo das workers?????????????
+  if (WAKE_UP == MAX_THREADS-1) {
+    WAKE_UP = 0;
+    pthread_mutex_lock(&wait_calculation);
+  }
   Submatrix *sub = (Submatrix*) arg;
-  sem_wait(&game_calculation);
+  int	a;
+  sem_up(&game_calculation);
 
   do {
     for (int i=sub->minor_i; i<=sub->major_i; i++) {
       for (int j=sub->minor_j; j<=sub->major_j; j++) {
         a = adjacent_to(prev, sub->total_size, i, j);
-        if (a == 2) next[i][j] = prev[i][j];  // Still the same
+        if (a == 2) next[i][j] = prev[i][j]; // Still the same
         if (a == 3) next[i][j] = 1;           // It's Alive!!!
         if (a < 2) next[i][j] = 0;            // Die
         if (a > 3) next[i][j] = 0;            // Die
@@ -251,18 +238,35 @@ void* worker_thread(void *arg) {
 
     pthread_mutex_lock(&wake_up_the_master);
     WAKE_UP++;
-    if (WAKE_UP == MAX_THREADS-1) {
-      pthread_mutex_unlock(&wait_calculation); // Última libera controller
-      WAKE_UP = 0;
-    }
+    if (WAKE_UP == MAX_THREADS-1)
+      pthread_mutex_unlock(&wait_calculation);
     pthread_mutex_unlock(&wake_up_the_master);
 
-    sem_wait(&game_calculation);
+    sem_up(&game_calculation);
+
   } while(!EXIT_GAME);
 
   free(sub);
   pthread_exit(NULL);
 }
+
+void* controller_thread() {
+  int i, j;
+  for (i = 0; i < STEPS; i++) {
+    for (j = 0; j < MAX_THREADS; j++)
+      sem_down(&game_calculation);
+    pthread_mutex_lock(&wait_calculation);
+
+    tmp = next;
+    next = prev;
+    prev = tmp;
+  }
+
+  EXIT_GAME = true;
+  for (j = 0; j < MAX_THREADS; j++)
+    sem_down(&game_calculation);
+  pthread_exit(NULL);
+} */
 
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);

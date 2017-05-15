@@ -1,9 +1,9 @@
 CC=gcc
 
-FLAGS=-O3 -Wno-unused-result
+FLAGS=-O3 -Wno-unused-result -g
 LDFLAGS=-lpthread
 #DEBUG=-DDEBUG
-#RESULT=-DRESULT
+RESULT=-DRESULT
 
 all: gol
 
