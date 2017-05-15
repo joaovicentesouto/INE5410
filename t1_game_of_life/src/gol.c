@@ -20,7 +20,7 @@
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
-pthread_mutex_t critical_section, barrier;
+pthread_mutex_t critical_region;
 sem_t game_calculation;
 int MAX_THREADS, STEPS, SIZE, ITERATOR = 0, LAST = 0;
 
@@ -91,9 +91,9 @@ void* play(void* arg) {
   Matrix* sub = (Matrix*) arg;
   int	i, j, a;
 
-  pthread_mutex_lock(&critical_section);
+  pthread_mutex_lock(&critical_region);
   while (ITERATOR < STEPS) {
-    pthread_mutex_unlock(&critical_section);
+    pthread_mutex_unlock(&critical_region);
 
     for (i = sub->minor_i; i <= sub->major_i; i++) {
       for (j = sub->minor_j; j <= sub->major_j; j++) {
@@ -105,7 +105,7 @@ void* play(void* arg) {
       }
     }
 
-    pthread_mutex_lock(&critical_section);
+    pthread_mutex_lock(&critical_region);
     LAST++;
     if (LAST == MAX_THREADS || MAX_THREADS == 1) {
       LAST = 0;
@@ -120,15 +120,17 @@ void* play(void* arg) {
       next = prev;
       prev = tmp;
 
-      for (i = 0; i < MAX_THREADS; i++)
+      for (i = 0; i < MAX_THREADS-1; i++)
         sem_post(&game_calculation);
+      pthread_mutex_unlock(&critical_region);
+    } else {
+      pthread_mutex_unlock(&critical_region);
+      sem_wait(&game_calculation);
     }
-    pthread_mutex_unlock(&critical_section);
 
-    pthread_mutex_lock(&critical_section);
-    sem_wait(&game_calculation);
+    pthread_mutex_lock(&critical_region);
   }
-  pthread_mutex_unlock(&critical_section);
+  pthread_mutex_unlock(&critical_region);
 
   pthread_exit(NULL);
 }
@@ -166,8 +168,7 @@ void read_file(FILE * f, cell_t ** board, int size) {
 
 int main(int argc, char * argv[]) {
 
-  pthread_mutex_init(&critical_section, NULL);
-  pthread_mutex_init(&barrier, NULL);
+  pthread_mutex_init(&critical_region, NULL);
   sem_init(&game_calculation, 0, 0); // inicia fechado
 
   MAX_THREADS = argc > 1? atoi(argv[1]) : 1;
@@ -225,7 +226,6 @@ int main(int argc, char * argv[]) {
   free_board(prev, SIZE); // Desaloca memória
   free_board(next, SIZE); // Desaloca memória
 
-  pthread_mutex_destroy(&critical_section);
-  pthread_mutex_destroy(&barrier);
+  pthread_mutex_destroy(&critical_region);
   sem_destroy(&game_calculation);
 }

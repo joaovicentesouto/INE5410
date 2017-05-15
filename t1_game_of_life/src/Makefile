@@ -1,6 +1,6 @@
 CC=gcc
 
-FLAGS=-O3 -Wno-unused-result -g
+FLAGS=-O3 -Wno-unused-result -std=c11
 LDFLAGS=-lpthread
 DEBUG=-DDEBUG
 RESULT=-DRESULT
