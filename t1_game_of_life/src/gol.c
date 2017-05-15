@@ -17,8 +17,9 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
-
 typedef unsigned char cell_t;
+
+cell_t **prev, **next, **tmp;
 pthread_mutex_t critical_section;
 sem_t game_calculation;
 int MAX_THREADS, STEPS, SIZE, ITERATOR = 0, LAST = 0;
@@ -93,7 +94,7 @@ void* play(void* arg) {
   while (ITERATOR < STEPS) {
     for (i = sub->minor_i; i <= sub->major_i; i++) {
       for (j = sub->minor_j; j <= sub->major_j; j++) {
-        a = adjacent_to(prev, sub->total_size, i, j);
+        a = adjacent_to(prev, SIZE, i, j);
         if (a == 2) next[i][j] = prev[i][j]; // Still the same
         if (a == 3) next[i][j] = 1;           // It's Alive!!!
         if (a < 2) next[i][j] = 0;            // Die
@@ -103,13 +104,13 @@ void* play(void* arg) {
 
     pthread_mutex_lock(&critical_section);
     LAST++;
-    if (LAST == MAX_THREADS) {
+    if (LAST == MAX_THREADS || MAX_THREADS == 1) {
       LAST = 0;
       ITERATOR++;
 
       #ifdef DEBUG
-      printf("%d\n----------\n", i + 1);
-      print(next,size);
+      printf("%d\n----------\n", ITERATOR);
+      //print(next, SIZE);
       #endif
 
       tmp = next;
@@ -164,17 +165,16 @@ int main(int argc, char * argv[]) {
   sem_init(&game_calculation, 0, 0); // inicia fechado
 
   MAX_THREADS = argc > 1? atoi(argv[1]) : 1;
-  printf("max_t:%d\n", max_threads);
+  printf("N# threads: %d\n", MAX_THREADS);
 
   // Cria tabuleiro e carrega células
   FILE    *f;
   f = stdin;
   fscanf(f,"%d %d", &SIZE, &STEPS);
-  cell_t ** prev = allocate_board(SIZE); // Uma thread aloca o prev
+  prev = allocate_board(SIZE); // Uma thread aloca o prev
   read_file(f, prev, SIZE);
   fclose(f);
-  cell_t ** next = allocate_board(SIZE); // Uma thread aloca o next
-  cell_t ** tmp;
+  next = allocate_board(SIZE); // Uma thread aloca o next
 
   #ifdef DEBUG
   printf("Initial:\n");
@@ -192,7 +192,7 @@ int main(int argc, char * argv[]) {
     int tmp;
     Matrix *sub = malloc(sizeof(Matrix));
 
-    count = (k % rules->col_per_thr) == 0 && k != 0 ? count+1 : count;
+    count = (i % rules->col_per_thr) == 0 && i != 0 ? count+1 : count;
     // Linha inicial e final
     tmp = (count % rules->row_per_thr) * rules->height;
     sub->minor_i = tmp < SIZE ? tmp : SIZE-1;
@@ -200,12 +200,12 @@ int main(int argc, char * argv[]) {
     sub->major_i = tmp < SIZE ? tmp : SIZE-1;
 
     // Coluna inicial e final
-    tmp = (k % rules->col_per_thr) * rules->width;
+    tmp = (i % rules->col_per_thr) * rules->width;
     sub->minor_j = tmp < SIZE ? tmp : SIZE-1;
-    tmp = (k % rules->col_per_thr + 1) * rules->width - 1;
+    tmp = (i % rules->col_per_thr + 1) * rules->width - 1;
     sub->major_j = tmp < SIZE ? tmp : SIZE-1;
 
-    pthread_create(&threads[i], NULL, play, (void*) sub)
+    pthread_create(&threads[i], NULL, play, (void*) sub);
   }
 
   for (i = 0; i < MAX_THREADS; i++)
@@ -213,7 +213,7 @@ int main(int argc, char * argv[]) {
 
   #ifdef RESULT
   printf("Final:\n");
-  print (prev, SIZE);
+  print(prev, SIZE);
   #endif
 
   free_board(prev, SIZE); // Desaloca memória
