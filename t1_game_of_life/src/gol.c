@@ -17,11 +17,15 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
+// Semáforo no macOS
+#include <dispatch/dispatch.h>
+
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
 pthread_mutex_t critical_region;
-sem_t game_calculation;
+dispatch_semaphore_t game_calculation;
+//sem_t game_calculation;
 int MAX_THREADS, STEPS, SIZE, ITERATOR = 0, LAST = 0;
 
 typedef struct {
@@ -87,53 +91,6 @@ int adjacent_to(cell_t ** board, int size, int i, int j) {
   return living_cells;
 }
 
-void* play(void* arg) {
-  Matrix* sub = (Matrix*) arg;
-  int	i, j, a;
-
-  pthread_mutex_lock(&critical_region);
-  while (ITERATOR < STEPS) {
-    pthread_mutex_unlock(&critical_region);
-
-    for (i = sub->minor_i; i <= sub->major_i; i++) {
-      for (j = sub->minor_j; j <= sub->major_j; j++) {
-        a = adjacent_to(prev, SIZE, i, j);
-        if (a == 2) next[i][j] = prev[i][j]; // Still the same
-        if (a == 3) next[i][j] = 1;           // It's Alive!!!
-        if (a < 2) next[i][j] = 0;            // Die
-        if (a > 3) next[i][j] = 0;            // Die
-      }
-    }
-
-    pthread_mutex_lock(&critical_region);
-    LAST++;
-    if (LAST == MAX_THREADS || MAX_THREADS == 1) {
-      LAST = 0;
-      ITERATOR++;
-
-      #ifdef DEBUG
-      printf("%d\n----------\n", ITERATOR);
-      //print(next, SIZE);
-      #endif
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
-
-      for (i = 0; i < MAX_THREADS-1; i++)
-        sem_post(&game_calculation);
-      pthread_mutex_unlock(&critical_region);
-    } else {
-      pthread_mutex_unlock(&critical_region);
-      sem_wait(&game_calculation);
-    }
-    pthread_mutex_lock(&critical_region);
-  }
-  pthread_mutex_unlock(&critical_region);
-
-  pthread_exit(NULL);
-}
-
 /* print the life board */
 void print(cell_t ** board, int size) {
   int	i, j;
@@ -159,13 +116,65 @@ void read_file(FILE * f, cell_t ** board, int size) {
   }
 }
 
+void* play(void* arg) {
+  Matrix* sub = (Matrix*) arg;
+  int	i, j, a;
+
+  pthread_mutex_lock(&critical_region);
+  while (ITERATOR < STEPS) {
+    pthread_mutex_unlock(&critical_region);
+
+    for (i = sub->minor_i; i <= sub->major_i; i++) {
+      for (j = sub->minor_j; j <= sub->major_j; j++) {
+        a = adjacent_to(prev, SIZE, i, j);
+        if (a == 2) next[i][j] = prev[i][j]; // Still the same
+        if (a == 3) next[i][j] = 1;           // It's Alive!!!
+        if (a < 2) next[i][j] = 0;            // Die
+        if (a > 3) next[i][j] = 0;            // Die
+      }
+    }
+
+    pthread_mutex_lock(&critical_region);
+    LAST++;
+    if (LAST == MAX_THREADS || MAX_THREADS == 1) {
+      LAST = 0;
+      ITERATOR++;
+
+      #ifdef DEBUG
+      printf("\n----------\n#%d", ITERATOR);
+      print(next, SIZE);
+      #endif
+
+      tmp = next;
+      next = prev;
+      prev = tmp;
+
+      for (i = 0; i < MAX_THREADS-1; i++)
+        dispatch_semaphore_signal(game_calculation);
+        //sem_post(&game_calculation);
+      pthread_mutex_unlock(&critical_region);
+    } else {
+      pthread_mutex_unlock(&critical_region);
+      dispatch_semaphore_wait(game_calculation, DISPATCH_TIME_FOREVER);
+      //sem_wait(&game_calculation);
+    }
+    pthread_mutex_lock(&critical_region);
+  }
+  pthread_mutex_unlock(&critical_region);
+
+  pthread_exit(NULL);
+}
+
 int main(int argc, char * argv[]) {
 
   pthread_mutex_init(&critical_region, NULL);
-  sem_init(&game_calculation, 0, 0); // inicia fechado
+  game_calculation = dispatch_semaphore_create(0);
+  //sem_init(&game_calculation, 0, 0); // inicia fechado
 
   MAX_THREADS = argc > 1? atoi(argv[1]) : 1;
+  #ifdef DEBUG
   printf("N# threads: %d\n", MAX_THREADS);
+  #endif
 
   // Cria tabuleiro e carrega células
   FILE    *f;
@@ -205,8 +214,10 @@ int main(int argc, char * argv[]) {
     tmp = (i % rules->col_per_thr + 1) * rules->width - 1;
     sub->major_j = tmp < SIZE ? tmp : SIZE-1;
 
-    printf("Matrix: %d, i:[%d, %d] / j:[%d, %d]\n",
+    #ifdef DEBUG
+    printf("Matrix: %d, i:[%d, %d] - j:[%d, %d]\n",
             i, sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
+    #endif
 
     pthread_create(&threads[i], NULL, play, (void*) sub);
   }
@@ -223,5 +234,6 @@ int main(int argc, char * argv[]) {
   free_board(next, SIZE); // Desaloca memória
 
   pthread_mutex_destroy(&critical_region);
-  sem_destroy(&game_calculation);
+  dispatch_release(game_calculation);
+  //sem_destroy(&game_calculation);
 }

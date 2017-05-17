@@ -2,7 +2,7 @@ CC=gcc
 
 FLAGS=-O3 -Wno-unused-result -std=c11
 LDFLAGS=-lpthread
-DEBUG=-DDEBUG
+#DEBUG=-DDEBUG
 RESULT=-DRESULT
 
 all: gol
