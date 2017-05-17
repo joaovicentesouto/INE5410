@@ -36,12 +36,14 @@ void division_of_work(Rules* r)
 {
   r->row_per_thr = MAX_THREADS;
   r->col_per_thr = 1;
-  for (int i = 1; i <= sqrt(MAX_THREADS); i++)
-    for (int j = sqrt(MAX_THREADS); j <= MAX_THREADS; j++)
+  for (int i = 1; i <= sqrt(MAX_THREADS); i++) {
+    for (int j = sqrt(MAX_THREADS); j <= MAX_THREADS; j++) {
       if (i*j == MAX_THREADS && abs(i-j) < abs(r->row_per_thr-r->col_per_thr)) {
           r->row_per_thr = i;
           r->col_per_thr = j;
       }
+    }
+  }
 
   float precision = SIZE / r->row_per_thr;
   r->height = (int) precision;
@@ -56,8 +58,7 @@ void division_of_work(Rules* r)
 
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  int	i;
-  for (i = 0; i < size; i++)
+  for (int i = 0; i < size; i++)
     board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
   return board;
 }
@@ -71,16 +72,15 @@ void free_board(cell_t ** board, int size) {
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to(cell_t ** board, int size, int i, int j) {
-  int	k, l, living_cells = 0;
+  int	living_cells = 0;
 
-  // Limits
   int minor_k = (i>0) ? i-1 : i;
   int major_k = (i+1 < size) ? i+1 : i;
   int minor_l = (j>0) ? j-1 : j;
   int major_l = (j+1 < size) ? j+1 : j;
 
-  for (k = minor_k; k <= major_k; k++)
-    for (l = minor_l; l <= major_l; l++)
+  for (int k = minor_k; k <= major_k; k++)
+    for (int l = minor_l; l <= major_l; l++)
       living_cells += board[k][l];
   living_cells -= board[i][j]; // Your own decreased cell position
 
@@ -127,7 +127,6 @@ void* play(void* arg) {
       pthread_mutex_unlock(&critical_region);
       sem_wait(&game_calculation);
     }
-
     pthread_mutex_lock(&critical_region);
   }
   pthread_mutex_unlock(&critical_region);
@@ -138,12 +137,9 @@ void* play(void* arg) {
 /* print the life board */
 void print(cell_t ** board, int size) {
   int	i, j;
-  /* for each row */
-  for (j=0; j<size; j++) {
-    /* print each column position... */
-    for (i=0; i<size; i++)
-    printf("%c", board[i][j] ? 'x' : ' ');
-    /* followed by a carriage return */
+  for (j = 0; j < size; j++) {
+    for (i = 0; i < size; i++)
+      printf("%c", board[i][j] ? 'x' : ' ');
     printf("\n");
   }
 }
@@ -153,15 +149,12 @@ void read_file(FILE * f, cell_t ** board, int size) {
   int	i, j;
   char	*s = (char *) malloc(size+10);
 
-  /* read the first new line (it will be ignored) */
-  fgets(s, size+10,f);
+  fgets(s, size+10, f); // ignore first line
 
-  /* read the life board */
-  for (j=0; j<size; j++) {
-    /* get a string */
+  for (j = 0; j < size; j++) {
     fgets(s, size+10,f);
-    /* copy the string to the life board */
-    for (i=0; i<size; i++)
+
+    for (i = 0; i < size; i++)
       board[i][j] = s[i] == 'x';
   }
 }
@@ -211,6 +204,9 @@ int main(int argc, char * argv[]) {
     sub->minor_j = tmp < SIZE ? tmp : SIZE-1;
     tmp = (i % rules->col_per_thr + 1) * rules->width - 1;
     sub->major_j = tmp < SIZE ? tmp : SIZE-1;
+
+    printf("Matrix: %d, i:[%d, %d] / j:[%d, %d]\n",
+            i, sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
 
     pthread_create(&threads[i], NULL, play, (void*) sub);
   }
