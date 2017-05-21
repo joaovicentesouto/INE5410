@@ -19,10 +19,10 @@
 #include <math.h>
 
 typedef unsigned char cell_t;
-
+// Variáveis globais
 cell_t **prev, **next, **tmp;
-pthread_barrier_t barrier;
 int max_threads, steps, size, iterator = 0, last = 0;
+pthread_barrier_t barrier;
 
 typedef struct {
   int row_per_thr, col_per_thr, height, width;
@@ -136,8 +136,8 @@ void* play(void* arg) {
       }
     }
 
-    int var = pthread_barrier_wait(&barrier);
-    if (var == PTHREAD_BARRIER_SERIAL_THREAD) {
+    int only_one = pthread_barrier_wait(&barrier); // Espera todas
+    if (only_one == PTHREAD_BARRIER_SERIAL_THREAD) {
       iterator++; // Soma a geração calculada.
 
       #ifdef DEBUG
@@ -145,12 +145,12 @@ void* play(void* arg) {
       print(next, size);
       #endif
 
-      // Troca dos PONTEIROS dos tabuleiros
+      // Troca dos ponteiros dos tabuleiros
       tmp = next;
       next = prev;
       prev = tmp;
     }
-    pthread_barrier_wait(&barrier);
+    pthread_barrier_wait(&barrier); // Espera todas
   } // Fim while = retorno para o teste, se passar calcula outra geração
 
   free(sub); // libera memória
