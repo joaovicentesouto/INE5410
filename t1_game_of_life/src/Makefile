@@ -2,8 +2,8 @@ CC=gcc
 
 FLAGS=-O3 -Wno-unused-result
 LDFLAGS=-lpthread -lm
-#DEBUG=-DDEBUG
-#RESULT=-DRESULT
+DEBUG=-DDEBUG
+RESULT=-DRESULT
 
 all: gol
 
