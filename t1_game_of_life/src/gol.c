@@ -17,15 +17,11 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
-// Semáforo no macOS
-#include <dispatch/dispatch.h>
 
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
-pthread_mutex_t critical_region;
-dispatch_semaphore_t game_calculation;
-//sem_t game_calculation;
+pthread_barrier_t barrier;
 int max_threads, steps, size, iterator = 0, last = 0;
 
 typedef struct {
@@ -127,9 +123,7 @@ void* play(void* arg) {
   Matrix* sub = (Matrix*) arg;
   int	i, j, a;
 
-  pthread_mutex_lock(&critical_region);
   while (iterator < steps) {
-    pthread_mutex_unlock(&critical_region);
 
     // Zona não críticas, todas executam ao mesmo tempo se conseguirem.
     for (i = sub->minor_i; i <= sub->major_i; i++) {
@@ -142,10 +136,8 @@ void* play(void* arg) {
       }
     }
 
-    pthread_mutex_lock(&critical_region);
-    last++; // Índice da thread que entrou
-    if (last == max_threads || max_threads == 1) { // == 1 pq pode ser apenas uma
-      last = 0; // Reseta o valor para o próximo loop
+    int var = pthread_barrier_wait(&barrier);
+    if (var == PTHREAD_BARRIER_SERIAL_THREAD) {
       iterator++; // Soma a geração calculada.
 
       #ifdef DEBUG
@@ -157,19 +149,9 @@ void* play(void* arg) {
       tmp = next;
       next = prev;
       prev = tmp;
-
-      for (i = 0; i < max_threads-1; i++) // Libera todas menos ela que está acordada.
-        dispatch_semaphore_signal(game_calculation);
-        //sem_post(&game_calculation);
-      pthread_mutex_unlock(&critical_region);
-    } else {
-      pthread_mutex_unlock(&critical_region);
-      dispatch_semaphore_wait(game_calculation, DISPATCH_TIME_FOREVER); // Espera a última
-      //sem_wait(&game_calculation);
     }
-    pthread_mutex_lock(&critical_region);
+    pthread_barrier_wait(&barrier)
   } // Fim while = retorno para o teste, se passar calcula outra geração
-  pthread_mutex_unlock(&critical_region);
 
   free(sub); // libera memória
   pthread_exit(NULL); // Fim da thread
@@ -177,14 +159,8 @@ void* play(void* arg) {
 
 int main(int argc, char * argv[]) {
 
-  pthread_mutex_init(&critical_region, NULL);
-  game_calculation = dispatch_semaphore_create(0);
-  //sem_init(&game_calculation, 0, 0); // inicia fechado
-
   max_threads = argc > 1? atoi(argv[1]) : 1;
-  #ifdef DEBUG
-  printf("N# threads: %d\n", max_threads);
-  #endif
+  pthread_barrier_init (&barrier, NULL, max_threads);
 
   // Cria tabuleiro e carrega células
   FILE    *f;
@@ -246,7 +222,5 @@ int main(int argc, char * argv[]) {
   free_board(prev, size); // Desaloca memória
   free_board(next, size); // Desaloca memória
 
-  pthread_mutex_destroy(&critical_region);
-  dispatch_release(game_calculation);
-  //sem_destroy(&game_calculation);
+  pthread_barrier_destroy(&barrier);
 }
