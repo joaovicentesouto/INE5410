@@ -150,7 +150,7 @@ void* play(void* arg) {
       next = prev;
       prev = tmp;
     }
-    pthread_barrier_wait(&barrier)
+    pthread_barrier_wait(&barrier);
   } // Fim while = retorno para o teste, se passar calcula outra geração
 
   free(sub); // libera memória
