@@ -8,8 +8,8 @@
 * or overcrowding
 *
 * In this version, a 2D array of ints is used.  A 1 cell is on, a 0 cell is off.
-* The game plays a number of steps (given by the input), printing to the screen each time.  'x' printed
-* means on, space means off.
+* The game plays a number of steps (given by the input), printing to the screen
+* each time. 'x' printed means on, space means off.
 *
 */
 #include <stdio.h>
@@ -19,7 +19,7 @@
 #include <math.h>
 typedef unsigned char cell_t;
 
-// Variáveis globais
+/* Variáveis globais */
 cell_t **prev, **next, **tmp;
 int max_threads, steps, size, iterator = 0, last = 0;
 pthread_barrier_t barrier;
@@ -32,17 +32,16 @@ typedef struct {
   int minor_i, minor_j, major_i, major_j;
 } Matrix;
 
-// Funcoes secundarias implementadas apos o main()
+/* Funcoes secundarias implementadas apos o main() */
 cell_t ** allocate_board(int size);
 void free_board(cell_t ** board, int size);
 int adjacent_to(cell_t ** board, int size, int i, int j);
 void print(cell_t ** board, int size);
 void read_file(FILE * f, cell_t ** board, int size);
 
+/* Encontra linhas e colunas por thread e a largura e altura da sub-matriz */
 void division_of_work(Rules* r) {
-  // Pega o número de threads e gera na regra de formação:
-  // t = n# threads, x,y = inteiros tal que:
-  // t = x*y e abs(x-y) seja mínimo.
+  // Encontra linhas e colunas por thread
   r->row_per_thr = max_threads;
   r->col_per_thr = 1;
   for (int i = 1; i <= sqrt(max_threads); i++) {
@@ -53,33 +52,29 @@ void division_of_work(Rules* r) {
       }
     }
   }
-  // Se der divisão não inteira e a parte fracionária for >= à 0.5,
-  // o número é arredondado para baixo, se não, para cima.
-  // Encontrando a altura de cada sub-matriz
+  // Altura e largura, cuidando se ocorrer divisao nao inteira
   float precision = size / r->row_per_thr;
   r->height = (int) precision;
   if (r->height * r->row_per_thr != size)
     r->height = precision - r->height >= 0.5 ? r->height : r->height+1;
 
-  // Encontrando a largura de cada sub-matriz
   precision = size / r->col_per_thr;
   r->width = (int) precision;
   if (r->width * r->col_per_thr != size)
     r->width = precision - r->width >= 0.5 ? r->width : r->width+1;
 }
 
+/* Funcao executada pelas threads*/
 void* play(void* arg) {
-  // Cast no arg para o tipo que eu passei.
   Matrix* sub = (Matrix*) arg;
   int	i, j, a, only_one;
 
   while (iterator < steps) {
 
-    // Zona não críticas, todas executam ao mesmo tempo se conseguirem.
     for (i = sub->minor_i; i <= sub->major_i; i++) {
       for (j = sub->minor_j; j <= sub->major_j; j++) {
         a = adjacent_to(prev, size, i, j);
-        if (a == 2) next[i][j] = prev[i][j]; // Still the same
+        if (a == 2) next[i][j] = prev[i][j];  // Still the same
         if (a == 3) next[i][j] = 1;           // It's Alive!!!
         if (a < 2) next[i][j] = 0;            // Die
         if (a > 3) next[i][j] = 0;            // Die
@@ -87,6 +82,7 @@ void* play(void* arg) {
     }
 
     only_one = pthread_barrier_wait(&barrier); // Espera todas
+
     if (only_one == PTHREAD_BARRIER_SERIAL_THREAD) {
       iterator++; // Soma a geração calculada.
 
@@ -95,25 +91,29 @@ void* play(void* arg) {
       print(next, size);
       #endif
 
-      // Troca dos ponteiros dos tabuleiros
       tmp = next;
       next = prev;
       prev = tmp;
     }
-    pthread_barrier_wait(&barrier); // Espera todas
-  } // Fim while = retorno para o teste, se passar calcula outra geração
 
-  free(sub); // libera memória
-  pthread_exit(NULL); // Fim da thread
+    pthread_barrier_wait(&barrier); // Espera todas
+  }
+
+  free(sub);
+  pthread_exit(NULL);
 }
 
 int main(int argc, char * argv[]) {
 
   max_threads = argc > 1? atoi(argv[1]) : 1;
+
+  // Inicializacao
+  pthread_t threads[max_threads];
+  Rules* rules = malloc(sizeof(Rules));
   pthread_barrier_init (&barrier, NULL, max_threads);
 
   // Cria tabuleiro e carrega células
-  FILE    *f;
+  FILE *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
   prev = allocate_board(size);
@@ -126,14 +126,10 @@ int main(int argc, char * argv[]) {
   print(prev, size);
   #endif
 
-  Rules* rules= malloc(sizeof(Rules));
   division_of_work(rules);
-
-  pthread_t threads[max_threads];
 
   int i, tmp, count = 0;
   // i serve para as formação das colunas e count para as linhas.
-  // Cria threads
   for (i = 0; i < max_threads; i++) {
     Matrix *sub = malloc(sizeof(Matrix));
 
@@ -169,12 +165,13 @@ int main(int argc, char * argv[]) {
   #endif
 
   free(rules);
-  free_board(prev, size); // Desaloca memória
-  free_board(next, size); // Desaloca memória
+  free_board(prev, size);
+  free_board(next, size);
 
   pthread_barrier_destroy(&barrier);
 }
 
+/* allocate memory */
 cell_t ** allocate_board(int size) {
   cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
   for (int i = 0; i < size; i++)
@@ -182,6 +179,7 @@ cell_t ** allocate_board(int size) {
   return board;
 }
 
+/* unallocate memory */
 void free_board(cell_t ** board, int size) {
   int i;
   for (i = 0; i < size; i++)
