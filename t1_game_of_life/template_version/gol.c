@@ -93,6 +93,21 @@ void read_file(FILE * f, cell_t ** board, int size) {
   }
 }
 
+/* write a file out the life board */
+void write_file(FILE * f, cell_t ** board, int size, int steps) {
+  int	i, j;
+  char	*s = (char *) malloc(size);
+
+  fprintf(f, "%d %d\n", size, steps);
+
+  for (i = 0; i < size; i++) {
+    for (j = 0; j < size; j++)
+        s[i] = board[i][j]? 'x' : ' ';
+    fprintf(f, "%s\n", s);
+  }
+  free(s);
+}
+
 int main(int argc, char * argv[]) {
 
   // Cria tabuleiro e carrega células
@@ -130,6 +145,10 @@ int main(int argc, char * argv[]) {
   printf("Final:\n");
   print (prev,size);
   #endif
+
+  f = fopen("escrita_orig.txt", "wb");
+  write_file(f, prev, size, steps);
+  fclose(f);
 
   free_board(prev,size); // Desaloca memória
   free_board(next,size); // Desaloca memória

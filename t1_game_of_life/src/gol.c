@@ -17,11 +17,12 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
+#include <unistd.h>
 typedef unsigned char cell_t;
 
+/* Variáveis globais */
 cell_t **prev, **next, **tmp;
 int max_threads, steps, size, iterator = 0, last = 0;
-
 sem_t barrier_1, barrier_2;
 pthread_mutex_t mutex;
 
@@ -33,10 +34,16 @@ typedef struct {
   int minor_i, minor_j, major_i, major_j;
 } Matrix;
 
+/* Funcoes secundarias implementadas apos o main() */
+cell_t ** allocate_board(int size);
+void free_board(cell_t ** board, int size);
+int adjacent_to(cell_t ** board, int size, int i, int j);
+void print(cell_t ** board, int size);
+void read_file(FILE * f, cell_t ** board, int size);
+
+/* Encontra linhas e colunas por thread e a largura e altura da sub-matriz */
 void division_of_work(Rules* r) {
-  // Pega o número de threads e gera na regra de formação:
-  // t = n# threads, x,y = inteiros tal que:
-  // t = x*y e abs(x-y) seja mínimo.
+  // Encontra linhas e colunas por thread
   r->row_per_thr = max_threads;
   r->col_per_thr = 1;
   for (int i = 1; i <= sqrt(max_threads); i++) {
@@ -47,19 +54,151 @@ void division_of_work(Rules* r) {
       }
     }
   }
-  // Se der divisão não inteira e a parte fracionária for >= à 0.5,
-  // o número é arredondado para baixo, se não, para cima.
-  // Encontrando a altura de cada sub-matriz
+  // Altura e largura, cuidando se ocorrer divisao nao inteira
   float precision = size / r->row_per_thr;
   r->height = (int) precision;
   if (r->height * r->row_per_thr != size)
     r->height = precision - r->height >= 0.5 ? r->height : r->height+1;
 
-  // Encontrando a largura de cada sub-matriz
   precision = size / r->col_per_thr;
   r->width = (int) precision;
   if (r->width * r->col_per_thr != size)
     r->width = precision - r->width >= 0.5 ? r->width : r->width+1;
+}
+
+/* Funcao executada pelas threads*/
+void* play(void* arg) {
+  Matrix* sub = (Matrix*) arg;
+  int	i, j, a, only_one = 0;
+
+  while (iterator < steps) {
+
+    for (i = sub->minor_i; i <= sub->major_i; i++) {
+      for (j = sub->minor_j; j <= sub->major_j; j++) {
+        a = adjacent_to(prev, size, i, j);
+        if (a == 2) next[i][j] = prev[i][j];  // Still the same
+        if (a == 3) next[i][j] = 1;           // It's Alive!!!
+        if (a < 2) next[i][j] = 0;            // Die
+        if (a > 3) next[i][j] = 0;            // Die
+      }
+    }
+
+    /* N threads chegam */
+    pthread_mutex_lock(&mutex);
+    last++;
+    if (last == max_threads) {
+      only_one = 1;
+      sem_wait(&barrier_2); // Trava segunda barreira
+      sem_post(&barrier_1); // Libera primeira barreira
+    }
+    pthread_mutex_unlock(&mutex);
+
+    /* Primeira barreira */
+    sem_wait(&barrier_1);
+    sem_post(&barrier_1);
+
+    if (only_one == 1) { // Apenas uma realiza
+      only_one = 0;
+      iterator++;
+
+      #ifdef DEBUG
+      printf("\n----------\n#%d", iterator);
+      print(next, size);
+      #endif
+
+      tmp = next;
+      next = prev;
+      prev = tmp;
+    }
+
+    /* N threads devem sair juntas */
+    pthread_mutex_lock(&mutex);
+    last--;
+    if (last == 0) {
+      sem_wait(&barrier_1); // Trava primeira barreira
+      sem_post(&barrier_2); // Libera segunda barreira
+    }
+    pthread_mutex_unlock(&mutex);
+
+    /* Segunda barreira */
+    sem_wait(&barrier_2);
+    sem_post(&barrier_2);
+  }
+
+  free(sub);
+  pthread_exit(NULL);
+}
+
+int main(int argc, char * argv[]) {
+
+  max_threads = argc > 1? atoi(argv[1]) : 1;
+
+  // Inicializacao
+  pthread_t threads[max_threads];
+  Rules* rules= malloc(sizeof(Rules));
+  pthread_mutex_init(&mutex, NULL);
+  sem_init(&barrier_1, 0, 0);
+  sem_init(&barrier_2, 0, 1);
+
+  // Cria tabuleiro e carrega células
+  FILE    *f;
+  f = stdin;
+  fscanf(f,"%d %d", &size, &steps);
+  prev = allocate_board(size);
+  read_file(f, prev, size);
+  fclose(f);
+  next = allocate_board(size);
+
+  #ifdef DEBUG
+  printf("Initial:\n");
+  print(prev, size);
+  #endif
+
+  division_of_work(rules);
+
+  int i, tmp, count = 0;
+  // i serve para as formação das colunas e count para as linhas.
+  for (i = 0; i < max_threads; i++) {
+    Matrix *sub = malloc(sizeof(Matrix));
+
+    // Count é somado quando todas as threads de uma linha forem criadas.
+    count = (i % rules->col_per_thr) == 0 && i != 0 ? count+1 : count;
+
+    // Linha inicial e final
+    tmp = (count % rules->row_per_thr) * rules->height;
+    sub->minor_i = tmp < size ? tmp : size-1;
+    tmp = (count % rules->row_per_thr + 1) * rules->height - 1;
+    sub->major_i = tmp < size ? tmp : size-1;
+
+    // Coluna inicial e final
+    tmp = (i % rules->col_per_thr) * rules->width;
+    sub->minor_j = tmp < size ? tmp : size-1;
+    tmp = (i % rules->col_per_thr + 1) * rules->width - 1;
+    sub->major_j = tmp < size ? tmp : size-1;
+
+    #ifdef DEBUG
+    printf("Matriz: %d, i:[%d, %d] - j:[%d, %d]\n",
+            i, sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
+    #endif
+
+    pthread_create(&threads[i], NULL, play, (void*) sub);
+  }
+
+  for (i = 0; i < max_threads; i++)
+    pthread_join(threads[i], NULL);
+
+  #ifdef RESULT
+  printf("Final:\n");
+  print(prev, size);
+  #endif
+
+  free(rules);
+  free_board(prev, size);
+  free_board(next, size);
+
+  pthread_mutex_destroy(&mutex);
+  sem_destroy(&barrier_1);
+  sem_destroy(&barrier_2);
 }
 
 cell_t ** allocate_board(int size) {
@@ -117,163 +256,4 @@ void read_file(FILE * f, cell_t ** board, int size) {
       board[i][j] = s[i] == 'x';
   }
   free(s);
-}
-
-/* read a file into the life board */
-void write_file(FILE * f, cell_t ** board, int size) {
-  int	i, j;
-  char	*s = (char *) malloc(size+10);
-
-  fprintf(f, "%d %d\n", size, steps);
-
-  for (j = 0; j < size; j++) {
-    for (i = 0; i < size; i++)
-      s[i] = board[i][j]? 'x' : ' ';
-    fprintf(f, "%s\n", s);
-    //fwrite(s, sizeof(char), sizeof(s), f);
-  }
-  free(s);
-}
-
-void* play(void* arg) {
-  // Cast no arg para o tipo que eu passei.
-  Matrix* sub = (Matrix*) arg;
-  int	i, j, a, only_one = 0;
-
-  while (iterator < steps) {
-
-    // Zona não críticas, todas executam ao mesmo tempo se conseguirem.
-    for (i = sub->minor_i; i <= sub->major_i; i++) {
-      for (j = sub->minor_j; j <= sub->major_j; j++) {
-        a = adjacent_to(prev, size, i, j);
-        if (a == 2) next[i][j] = prev[i][j]; // Still the same
-        if (a == 3) next[i][j] = 1;           // It's Alive!!!
-        if (a < 2) next[i][j] = 0;            // Die
-        if (a > 3) next[i][j] = 0;            // Die
-      }
-    }
-
-    pthread_mutex_lock(&mutex);
-    last++; // N threads chegam
-    if (last == max_threads) { // Ultima
-      only_one = 1;
-      sem_wait(&barrier_2); // Trava segunda barreira
-      sem_post(&barrier_1);
-      pthread_mutex_unlock(&mutex);
-    } else {
-      pthread_mutex_unlock(&mutex);
-      sem_wait(&barrier_1);
-      sem_post(&barrier_1);
-    }
-
-    if (only_one == 1) {
-      only_one = 0;
-      iterator++;
-
-      #ifdef DEBUG
-      printf("\n----------\n#%d", iterator);
-      print(next, size);
-      #endif
-
-      // Troca dos PONTEIROS dos tabuleiros
-      tmp = next;
-      next = prev;
-      prev = tmp;
-    }
-
-    pthread_mutex_lock(&mutex);
-    last--; // N threads devem sair juntas
-    if (last == 0) {
-      sem_wait(&barrier_1);
-      sem_post(&barrier_2);
-      pthread_mutex_unlock(&mutex);
-    } else {
-      pthread_mutex_unlock(&mutex);
-      sem_wait(&barrier_2);
-      sem_post(&barrier_2);
-    }
-  }
-
-  free(sub); // libera memória
-  pthread_exit(NULL); // Fim da thread
-}
-
-int main(int argc, char * argv[]) {
-
-  pthread_mutex_init(&mutex, NULL);
-  sem_init(&barrier_1, 0, 0); // inicia fechado
-  sem_init(&barrier_2, 0, 1);
-
-  max_threads = argc > 1? atoi(argv[1]) : 1;
-  #ifdef DEBUG
-  printf("N# threads: %d\n", max_threads);
-  #endif
-
-  // Cria tabuleiro e carrega células
-  FILE    *f;
-  f = stdin;
-  fscanf(f,"%d %d", &size, &steps);
-  prev = allocate_board(size);
-  read_file(f, prev, size);
-  fclose(f);
-  next = allocate_board(size);
-
-  #ifdef DEBUG
-  printf("Initial:\n");
-  print(prev, size);
-  #endif
-
-  Rules* rules= malloc(sizeof(Rules));
-  division_of_work(rules);
-
-  pthread_t threads[max_threads];
-
-  int i, tmp, count = 0;
-  // i serve para as formação das colunas e count para as linhas.
-  // Cria threads
-  for (i = 0; i < max_threads; i++) {
-    Matrix *sub = malloc(sizeof(Matrix));
-
-    // Count é somado quando todas as threads de uma linha forem criadas.
-    count = (i % rules->col_per_thr) == 0 && i != 0 ? count+1 : count;
-
-    // Linha inicial e final
-    tmp = (count % rules->row_per_thr) * rules->height;
-    sub->minor_i = tmp < size ? tmp : size-1;
-    tmp = (count % rules->row_per_thr + 1) * rules->height - 1;
-    sub->major_i = tmp < size ? tmp : size-1;
-
-    // Coluna inicial e final
-    tmp = (i % rules->col_per_thr) * rules->width;
-    sub->minor_j = tmp < size ? tmp : size-1;
-    tmp = (i % rules->col_per_thr + 1) * rules->width - 1;
-    sub->major_j = tmp < size ? tmp : size-1;
-
-    #ifdef DEBUG
-    printf("Matriz: %d, i:[%d, %d] - j:[%d, %d]\n",
-            i, sub->minor_i, sub->major_i, sub->minor_j, sub->major_j);
-    #endif
-
-    pthread_create(&threads[i], NULL, play, (void*) sub);
-  }
-
-  for (i = 0; i < max_threads; i++)
-    pthread_join(threads[i], NULL);
-
-  #ifdef RESULT
-  printf("Final:\n");
-  print(prev, size);
-  #endif
-
-  f = fopen("escrita.txt", "wb");
-  write_file(f, prev, size);
-  fclose(f);
-
-  free(rules);
-  free_board(prev, size); // Desaloca memória
-  free_board(next, size); // Desaloca memória
-
-  pthread_mutex_destroy(&mutex);
-  sem_destroy(&barrier_1);
-  sem_destroy(&barrier_2);
 }
