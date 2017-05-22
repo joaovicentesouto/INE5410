@@ -17,8 +17,8 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
-
 typedef unsigned char cell_t;
+
 // Variáveis globais
 cell_t **prev, **next, **tmp;
 int max_threads, steps, size, iterator = 0, last = 0;
@@ -31,6 +31,13 @@ typedef struct {
 typedef struct {
   int minor_i, minor_j, major_i, major_j;
 } Matrix;
+
+// Funcoes secundarias implementadas apos o main()
+cell_t ** allocate_board(int size);
+void free_board(cell_t ** board, int size);
+int adjacent_to(cell_t ** board, int size, int i, int j);
+void print(cell_t ** board, int size);
+void read_file(FILE * f, cell_t ** board, int size);
 
 void division_of_work(Rules* r) {
   // Pega o número de threads e gera na regra de formação:
@@ -61,67 +68,10 @@ void division_of_work(Rules* r) {
     r->width = precision - r->width >= 0.5 ? r->width : r->width+1;
 }
 
-cell_t ** allocate_board(int size) {
-  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
-  for (int i = 0; i < size; i++)
-    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
-  return board;
-}
-
-void free_board(cell_t ** board, int size) {
-  int i;
-  for (i = 0; i < size; i++)
-    free(board[i]);
-  free(board);
-}
-
-/* return the number of on cells adjacent to the i,j cell */
-int adjacent_to(cell_t ** board, int size, int i, int j) {
-  int	living_cells = 0;
-
-  int minor_k = (i>0) ? i-1 : i;
-  int major_k = (i+1 < size) ? i+1 : i;
-  int minor_l = (j>0) ? j-1 : j;
-  int major_l = (j+1 < size) ? j+1 : j;
-
-  for (int k = minor_k; k <= major_k; k++)
-    for (int l = minor_l; l <= major_l; l++)
-      living_cells += board[k][l];
-  living_cells -= board[i][j]; // Your own decreased cell position
-
-  return living_cells;
-}
-
-/* print the life board */
-void print(cell_t ** board, int size) {
-  int	i, j;
-  for (j = 0; j < size; j++) {
-    for (i = 0; i < size; i++)
-      printf("%c", board[i][j] ? 'x' : ' ');
-    printf("\n");
-  }
-}
-
-/* read a file into the life board */
-void read_file(FILE * f, cell_t ** board, int size) {
-  int	i, j;
-  char	*s = (char *) malloc(size+10);
-
-  fgets(s, size+10, f); // ignore first line
-
-  for (j = 0; j < size; j++) {
-    fgets(s, size+10,f);
-
-    for (i = 0; i < size; i++)
-      board[i][j] = s[i] == 'x';
-  }
-  free(s);
-}
-
 void* play(void* arg) {
   // Cast no arg para o tipo que eu passei.
   Matrix* sub = (Matrix*) arg;
-  int	i, j, a;
+  int	i, j, a, only_one;
 
   while (iterator < steps) {
 
@@ -136,7 +86,7 @@ void* play(void* arg) {
       }
     }
 
-    int only_one = pthread_barrier_wait(&barrier); // Espera todas
+    only_one = pthread_barrier_wait(&barrier); // Espera todas
     if (only_one == PTHREAD_BARRIER_SERIAL_THREAD) {
       iterator++; // Soma a geração calculada.
 
@@ -223,4 +173,61 @@ int main(int argc, char * argv[]) {
   free_board(next, size); // Desaloca memória
 
   pthread_barrier_destroy(&barrier);
+}
+
+cell_t ** allocate_board(int size) {
+  cell_t ** board = (cell_t **) malloc(sizeof(cell_t*)*size);
+  for (int i = 0; i < size; i++)
+    board[i] = (cell_t *) malloc(sizeof(cell_t)*size);
+  return board;
+}
+
+void free_board(cell_t ** board, int size) {
+  int i;
+  for (i = 0; i < size; i++)
+    free(board[i]);
+  free(board);
+}
+
+/* return the number of on cells adjacent to the i,j cell */
+int adjacent_to(cell_t ** board, int size, int i, int j) {
+  int	living_cells = 0;
+
+  int minor_k = (i>0) ? i-1 : i;
+  int major_k = (i+1 < size) ? i+1 : i;
+  int minor_l = (j>0) ? j-1 : j;
+  int major_l = (j+1 < size) ? j+1 : j;
+
+  for (int k = minor_k; k <= major_k; k++)
+    for (int l = minor_l; l <= major_l; l++)
+      living_cells += board[k][l];
+  living_cells -= board[i][j]; // Your own decreased cell position
+
+  return living_cells;
+}
+
+/* print the life board */
+void print(cell_t ** board, int size) {
+  int	i, j;
+  for (j = 0; j < size; j++) {
+    for (i = 0; i < size; i++)
+      printf("%c", board[i][j] ? 'x' : ' ');
+    printf("\n");
+  }
+}
+
+/* read a file into the life board */
+void read_file(FILE * f, cell_t ** board, int size) {
+  int	i, j;
+  char	*s = (char *) malloc(size+10);
+
+  fgets(s, size+10, f); // ignore first line
+
+  for (j = 0; j < size; j++) {
+    fgets(s, size+10,f);
+
+    for (i = 0; i < size; i++)
+      board[i][j] = s[i] == 'x';
+  }
+  free(s);
 }
