@@ -21,7 +21,7 @@ typedef unsigned char cell_t;
 
 /* Variáveis globais */
 cell_t **prev, **next, **tmp;
-int max_threads, steps, size, iterator = 0, last = 0;
+int max_threads, steps, size, iterator = 0;
 pthread_barrier_t barrier;
 
 typedef struct {
