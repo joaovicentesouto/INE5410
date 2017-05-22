@@ -146,6 +146,8 @@ void* play(void* arg) {
       last = 0; // Reseta o valor para o próximo loop
       iterator++; // Soma a geração calculada.
 
+      printf("Ultima %u\n", (unsigned int)pthread_self());
+
       #ifdef DEBUG
       printf("\n----------\n#%d", iterator);
       print(next, size);
@@ -161,7 +163,7 @@ void* play(void* arg) {
       pthread_mutex_unlock(&critical_region);
     } else {
       int x;
-      printf("Vou esperar: %d\n", last);
+      printf("Vou esperar %u: %d\n", (unsigned int)pthread_self(), last);
       sem_getvalue(&game_calculation, &x);
       printf("Valor semaphore %d\n", x);
 
@@ -170,7 +172,7 @@ void* play(void* arg) {
 
       sem_getvalue(&game_calculation, &x);
       printf("Valor semaphore %d\n", x);
-      printf("Me acordaram: %d\n", last);
+      printf("Me acordaram %u: %d\n", (unsigned int)pthread_self(), last);
     }
     pthread_mutex_lock(&critical_region);
   } while (iterator < steps);// Fim while = retorno para o teste, se passar calcula outra geração
