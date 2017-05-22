@@ -17,13 +17,13 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
-
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
-pthread_mutex_t critical_region;
-sem_t game_calculation;
 int max_threads, steps, size, iterator = 0, last = 0;
+
+sem_t barrier_1, barrier_2;
+pthread_mutex_t mutex;
 
 typedef struct {
   int row_per_thr, col_per_thr, height, width;
@@ -122,11 +122,9 @@ void read_file(FILE * f, cell_t ** board, int size) {
 void* play(void* arg) {
   // Cast no arg para o tipo que eu passei.
   Matrix* sub = (Matrix*) arg;
-  int	i, j, a;
+  int	i, j, a, only_one = 0;
 
-  pthread_mutex_lock(&critical_region);
-  do {
-    pthread_mutex_unlock(&critical_region);
+  while (iterator < steps) {
 
     // Zona não críticas, todas executam ao mesmo tempo se conseguirem.
     for (i = sub->minor_i; i <= sub->major_i; i++) {
@@ -138,15 +136,23 @@ void* play(void* arg) {
         if (a > 3) next[i][j] = 0;            // Die
       }
     }
-    //printf("Terminei calcular: %d\n", last);
 
-    pthread_mutex_lock(&critical_region);
-    last++; // Índice da thread que
-    if (last == max_threads || max_threads == 1) { // == 1 pq pode ser apenas uma
-      last = 0; // Reseta o valor para o próximo loop
-      iterator++; // Soma a geração calculada.
+    pthread_mutex_lock(&mutex);
+    last++; // N threads chegam
+    if (last == max_threads) { // Ultima
+      only_one = 1;
+      sem_wait(&barrier_2); // Trava segunda barreira
+      sem_post(&barrier_1);
+      pthread_mutex_unlock(&mutex);
+    } else {
+      pthread_mutex_unlock(&mutex);
+      sem_wait(&barrier_1);
+      sem_post(&barrier_1);
+    }
 
-      printf("Ultima %u\n", (unsigned int)pthread_self());
+    if (only_one == 1) {
+      only_one = 0;
+      iterator++;
 
       #ifdef DEBUG
       printf("\n----------\n#%d", iterator);
@@ -157,26 +163,20 @@ void* play(void* arg) {
       tmp = next;
       next = prev;
       prev = tmp;
-
-      for (i = 0; i < max_threads-1; i++) // Libera todas menos ela que está acordada.
-        sem_post(&game_calculation);
-      pthread_mutex_unlock(&critical_region);
-    } else {
-      int x;
-      printf("Vou esperar %u: %d\n", (unsigned int)pthread_self(), last);
-      sem_getvalue(&game_calculation, &x);
-      printf("Valor semaphore %d\n", x);
-
-      pthread_mutex_unlock(&critical_region);
-      sem_wait(&game_calculation);
-
-      sem_getvalue(&game_calculation, &x);
-      printf("Valor semaphore %d\n", x);
-      printf("Me acordaram %u: %d\n", (unsigned int)pthread_self(), last);
     }
-    pthread_mutex_lock(&critical_region);
-  } while (iterator < steps);// Fim while = retorno para o teste, se passar calcula outra geração
-  pthread_mutex_unlock(&critical_region);
+
+    pthread_mutex_lock(&mutex);
+    last--; // N threads devem sair juntas
+    if (last == 0) {
+      sem_wait(&barrier_1);
+      sem_post(&barrier_2);
+      pthread_mutex_unlock(&mutex);
+    } else {
+      pthread_mutex_unlock(&mutex);
+      sem_wait(&barrier_2);
+      sem_post(&barrier_2);
+    }
+  }
 
   free(sub); // libera memória
   pthread_exit(NULL); // Fim da thread
@@ -184,8 +184,9 @@ void* play(void* arg) {
 
 int main(int argc, char * argv[]) {
 
-  pthread_mutex_init(&critical_region, NULL);
-  sem_init(&game_calculation, 0, 0); // inicia fechado
+  pthread_mutex_init(&mutex, NULL);
+  sem_init(&barrier_1, 0, 0); // inicia fechado
+  sem_init(&barrier_2, 0, 1);
 
   max_threads = argc > 1? atoi(argv[1]) : 1;
   #ifdef DEBUG
@@ -252,6 +253,7 @@ int main(int argc, char * argv[]) {
   free_board(prev, size); // Desaloca memória
   free_board(next, size); // Desaloca memória
 
-  pthread_mutex_destroy(&critical_region);
-  sem_destroy(&game_calculation);
+  pthread_mutex_destroy(&mutex);
+  sem_destroy(&barrier_1);
+  sem_destroy(&barrier_2);
 }
