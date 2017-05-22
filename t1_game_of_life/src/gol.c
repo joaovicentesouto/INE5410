@@ -17,15 +17,12 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <math.h>
-// Semáforo no macOS
-#include <dispatch/dispatch.h>
 
 typedef unsigned char cell_t;
 
 cell_t **prev, **next, **tmp;
 pthread_mutex_t critical_region;
-dispatch_semaphore_t game_calculation;
-//sem_t game_calculation;
+sem_t game_calculation;
 int max_threads, steps, size, iterator = 0, last = 0;
 
 typedef struct {
@@ -128,7 +125,7 @@ void* play(void* arg) {
   int	i, j, a;
 
   pthread_mutex_lock(&critical_region);
-  while (iterator < steps) {
+  do {
     pthread_mutex_unlock(&critical_region);
 
     // Zona não críticas, todas executam ao mesmo tempo se conseguirem.
@@ -141,9 +138,10 @@ void* play(void* arg) {
         if (a > 3) next[i][j] = 0;            // Die
       }
     }
+    //printf("Terminei calcular: %d\n", last);
 
     pthread_mutex_lock(&critical_region);
-    last++; // Índice da thread que entrou
+    last++; // Índice da thread que
     if (last == max_threads || max_threads == 1) { // == 1 pq pode ser apenas uma
       last = 0; // Reseta o valor para o próximo loop
       iterator++; // Soma a geração calculada.
@@ -159,16 +157,23 @@ void* play(void* arg) {
       prev = tmp;
 
       for (i = 0; i < max_threads-1; i++) // Libera todas menos ela que está acordada.
-        dispatch_semaphore_signal(game_calculation);
-        //sem_post(&game_calculation);
+        sem_post(&game_calculation);
       pthread_mutex_unlock(&critical_region);
     } else {
+      int x;
+      printf("Vou esperar: %d\n", last);
+      sem_getvalue(&game_calculation, &x);
+      printf("Valor semaphore %d\n", x);
+
       pthread_mutex_unlock(&critical_region);
-      dispatch_semaphore_wait(game_calculation, DISPATCH_TIME_FOREVER); // Espera a última
-      //sem_wait(&game_calculation);
+      sem_wait(&game_calculation);
+
+      sem_getvalue(&game_calculation, &x);
+      printf("Valor semaphore %d\n", x);
+      printf("Me acordaram: %d\n", last);
     }
     pthread_mutex_lock(&critical_region);
-  } // Fim while = retorno para o teste, se passar calcula outra geração
+  } while (iterator < steps);// Fim while = retorno para o teste, se passar calcula outra geração
   pthread_mutex_unlock(&critical_region);
 
   free(sub); // libera memória
@@ -178,8 +183,7 @@ void* play(void* arg) {
 int main(int argc, char * argv[]) {
 
   pthread_mutex_init(&critical_region, NULL);
-  game_calculation = dispatch_semaphore_create(0);
-  //sem_init(&game_calculation, 0, 0); // inicia fechado
+  sem_init(&game_calculation, 0, 0); // inicia fechado
 
   max_threads = argc > 1? atoi(argv[1]) : 1;
   #ifdef DEBUG
@@ -247,6 +251,5 @@ int main(int argc, char * argv[]) {
   free_board(next, size); // Desaloca memória
 
   pthread_mutex_destroy(&critical_region);
-  dispatch_release(game_calculation);
-  //sem_destroy(&game_calculation);
+  sem_destroy(&game_calculation);
 }
