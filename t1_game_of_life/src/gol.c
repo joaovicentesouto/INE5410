@@ -229,5 +229,4 @@ void read_file(FILE * f, cell_t ** board, int size) {
     for (i = 0; i < size; i++)
       board[i][j] = s[i] == 'x';
   }
-  free(s);
 }
