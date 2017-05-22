@@ -119,6 +119,22 @@ void read_file(FILE * f, cell_t ** board, int size) {
   free(s);
 }
 
+/* read a file into the life board */
+void write_file(FILE * f, cell_t ** board, int size) {
+  int	i, j;
+  char	*s = (char *) malloc(size+10);
+
+  fprintf(f, "%d %d\n", size, steps);
+
+  for (j = 0; j < size; j++) {
+    for (i = 0; i < size; i++)
+      s[i] = board[i][j]? 'x' : ' ';
+    fprintf(f, "%s\n", s);
+    //fwrite(s, sizeof(char), sizeof(s), f);
+  }
+  free(s);
+}
+
 void* play(void* arg) {
   // Cast no arg para o tipo que eu passei.
   Matrix* sub = (Matrix*) arg;
@@ -248,6 +264,10 @@ int main(int argc, char * argv[]) {
   printf("Final:\n");
   print(prev, size);
   #endif
+
+  f = fopen("escrita.txt", "wb");
+  write_file(f, prev, size);
+  fclose(f);
 
   free(rules);
   free_board(prev, size); // Desaloca memória
