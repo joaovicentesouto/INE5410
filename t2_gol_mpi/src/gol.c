@@ -14,6 +14,7 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
+#include <mpi.h>
 typedef unsigned char cell_t;
 
 /* Funcoes executadas por ambos */
@@ -28,21 +29,76 @@ void read_file (FILE * f, cell_t ** board, int size);
 int adjacent_to (cell_t ** board, int size, int i, int j);
 void play (cell_t ** board, cell_t ** newboard, int size);
 
-int main () {
-  int size, steps;
-  FILE    *f;
-  f = stdin;
-  fscanf(f,"%d %d", &size, &steps);
-  cell_t ** prev = allocate_board (size);
-  read_file (f, prev,size);
-  fclose(f);
-  cell_t ** next = allocate_board (size);
-  cell_t ** tmp;
-  int i;
-  #ifdef DEBUG
-  printf("Initial:\n");
-  print(prev,size);
-  #endif
+int main (int argc, char *argv[]) {
+  int processes, rank;
+  MPI_Init(argc, argv);
+  MPI_Comm_size(MPI_COMM_WORLD, &processes);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if (rank == 0) { // master
+    int size, steps;
+    FILE *f;
+    f = stdin;
+    fscanf(f,"%d %d", &size, &steps);
+    cell_t ** prev = allocate_board (size);
+    read_file (f, prev,size);
+    fclose(f);
+    cell_t ** next = allocate_board (size);
+    cell_t ** tmp;
+    int i;
+    #ifdef DEBUG
+    printf("Initial:\n");
+    print(prev,size);
+    #endif
+
+    // Quantidade de linhas para cada um
+    float precision = size/processes;
+    int integer_part, lines_amount;
+    lines_amount = integer_part = (int) precision;
+    lines_amount += precision - integer_part <= 0.5 ? 0 : 1;
+
+    // Avisando pra construirem as matrizes com os respectivos tamanhos
+    MPI_Send(&lines_amount, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Tem que verificar se o ultimo esta com o tamanho correto
+    // Se size - line..... for == 0 entao ocorreu divisao inteira
+    int last_process = lines_amount + (size - lines_amount*processes);
+    //if (last_process != lines_amount) // Ultimo processo com o tamanho errado
+    MPI_Send(&last_process, 1, MPI_INT, processes, MPI_COMM_WORLD);
+
+    // Matrizes auxiliares
+    cell_t first_and_last[lines_amount+1][size];
+    cell_t others[lines_amount+2][size];
+
+    // Primeiro processo
+    for (int i = 0; i < lines_amount+1; ++i)
+      first_and_last[i] = prev[i];
+    MPI_Send(&first_and_last, (lines_amount+1)*size, MPI_UNSIGNED_CHAR, 1, MPI_COMM_WORLD);
+
+    /***** Ver pra usar SendI pra nao ficar esperando enviar  *****/
+
+    // processos do meio
+    int aux = 0;
+    for (int i = 1; i < processes-2; ++i) {
+      aux = (i*lines_amount-1); // em funcao do processo (p-1 * linhas - 1)
+      for (int j = 0; j < lines_amount+2; ++j)
+        others[j] = prev[aux + j];
+      MPI_Send(&others, (lines_amount+2)*size, MPI_UNSIGNED_CHAR, i+1, MPI_COMM_WORLD);
+    }
+
+    // ultimo processo
+    aux = (processes-1)*lines_amount-1;
+    for (int i = 0; i < lines_amount+1; ++i)
+      first_and_last[i] = prev[aux + i];
+    MPI_Send(&first_and_last, (lines_amount+1)*size, MPI_UNSIGNED_CHAR, 1, MPI_COMM_WORLD);
+
+    for (int i = 0; i < processes-1; ++i) {
+      MPI_Recv(); // espera todos terminarem
+    }
+
+  } else { // slave
+
+  }
 
   for (i=0; i<steps; i++) {
     play (prev,next,size);
@@ -62,6 +118,9 @@ int main () {
 
   free_board(prev,size);
   free_board(next,size);
+
+  MPI_Finalize();
+  return 0;
 }
 
 cell_t ** allocate_board (int size) {
