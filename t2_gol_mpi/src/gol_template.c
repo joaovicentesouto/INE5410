@@ -14,86 +14,7 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
-#include <mpi.h>
 typedef unsigned char cell_t;
-
-/* Functions performed by the master */
-void print (cell_t * board, int size);
-void read_file (FILE * f, cell_t * board, int size);
-
-/* Functions performed by the slaves */
-int adjacent_to (cell_t * board, int size, int i, int j);
-void play (cell_t * board, cell_t * newboard, int size);
-
-int division_of_work(int slaves, int size) {
-  float precision = size/processes;
-  int integer_part = (int) precision;
-  return integer_part + (precision - integer_part <= 0.5 ? 0 : 1);
-}
-
-int main () {
-  int processes, rank;
-
-  MPI_Init(&argc, &argv);
-  MPI_Comm_size(MPI_COMM_WORLD, &processes);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  if (rank == 0) {
-    /* 1: Alocagem de memória e leitura do tabuleiro */
-    int size, steps, division;
-    FILE *f;
-    f = stdin;
-    fscanf(f, "%d %d", &size, &steps);
-
-    /* Avisa para os filhos os tamanho das matrizes deles */
-    division = division_of_work(processes-1, size);
-    MPI_Bcast(&division, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
-    read_file (f, prev, size);
-    fclose(f);
-
-    cell_t * next = (cell_t *) malloc(sizeof(cell_t) * size * size);
-    cell_t * tmp;
-
-    #ifdef DEBUG
-    printf("Initial:\n");
-    print(prev,size);
-    #endif
-    /* Fim 1  */
-
-    /* 2: Separação de trabalho e envio para os escravos */
-    for (int i = 0; i < steps; ++i) {
-      play (prev,next,size);
-
-      #ifdef DEBUG
-      printf("%d ----------\n", i + 1);
-      print (next,size);
-      #endif
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
-    }
-    /* Fim 2 */
-
-    /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
-    #ifdef RESULT
-    printf("Final:\n");
-    print (prev,size);
-    #endif
-
-    free(prev);
-    free(next);
-    /* Fim 3 */
-
-  } else {
-
-  }
-
-  MPI_Finalize();
-  return 0;
-}
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to (cell_t * board, int size, int i, int j) {
@@ -162,4 +83,45 @@ void read_file (FILE * f, cell_t * board, int size) {
     for (int i = 0; i < size; ++i)      // For to set cells
       board[i*size + j] = s[i] == 'x';  // Set cells
   }
+}
+
+int main () {
+
+  int size, steps;
+  FILE *f;
+  f = stdin;
+  fscanf(f,"%d %d", &size, &steps);
+
+  cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
+  read_file (f, prev,size);
+  fclose(f);
+
+  cell_t * next = (cell_t *) malloc(sizeof(cell_t) * size * size);
+  cell_t * tmp;
+
+  #ifdef DEBUG
+  printf("Initial:\n");
+  print(prev,size);
+  #endif
+
+  for (int i = 0; i < steps; ++i) {
+    play (prev,next,size);
+
+    #ifdef DEBUG
+    printf("%d ----------\n", i + 1);
+    print (next,size);
+    #endif
+
+    tmp = next;
+    next = prev;
+    prev = tmp;
+  }
+
+  #ifdef RESULT
+  printf("Final:\n");
+  print (prev,size);
+  #endif
+
+  free(prev);
+  free(next);
 }
