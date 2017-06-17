@@ -70,6 +70,12 @@ int main (int argc, char *argv[]) {
     cell_t first_and_last[lines_amount+1][size];
     cell_t others[lines_amount+2][size];
 
+    /* Talvez nem precise pegar os ponteiros, pensando que a matriz
+       esta disposta em linhas, posso dizer qual lugar comecar a 
+       pegar entao mandar size * linhas e tal???
+       malloc eh dinamico, mas coloca tudo sequencial?
+    */
+
     // Primeiro processo
     for (int i = 0; i < lines_amount+1; ++i)
       first_and_last[i] = prev[i];
