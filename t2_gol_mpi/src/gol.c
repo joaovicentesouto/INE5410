@@ -59,7 +59,6 @@ int main () {
     MPI_Send(&last_lines, 1, MPI_INT, processes-1, 0, MPI_COMM_WORLD);
 
     cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
-    cell_t * next = (cell_t *) malloc(sizeof(cell_t) * size * size);
 
     read_file (f, prev, size);
     fclose(f);
@@ -74,26 +73,24 @@ int main () {
     // Primeiro
     MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
-    // Intermediários
-    for (int i = 1; i < processes-2; i++)
-      MPI_Send((prev*i - size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
+    // Intermediários: i => n# processo-1
+    int i;
+    for (i = 1; i < processes-2; i++)
+      MPI_Send((prev + (i*lines-1)*size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
 
     // Último
-    MPI_Send((prev*(processes-2)-size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, processes-1, 0, MPI_COMM_WORLD);
+    MPI_Send((prev + (i*lines-1)*size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
     /* Fim 2 */
 
     /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
-
-    /***  PRECISA VERIFICAR SE ESTA MANDANDO E RECEBENDO A PARTE CORRETA ***/
-
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
 
-    // Intermediários
-    for (int i = 1; i < processes-2; i++)
-      MPI_Recv((prev*i), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+    // Intermediários: i => n# processo-1
+    for (i = 1; i < processes-2; i++)
+      MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
     // Último
-    MPI_Recv((prev*(processes-2)), (last_lines*size), MPI_UNSIGNED_CHAR, processes-1, 0, MPI_COMM_WORLD, NULL);
+    MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
     #ifdef RESULT
     printf("Final:\n");
