@@ -46,6 +46,7 @@ int main () {
     fscanf(f, "%d %d", &size, &steps);
 
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     /* Avisa para os filhos os tamanho das matrizes deles */
     float precision = size/processes;
@@ -70,16 +71,30 @@ int main () {
     /* Fim 1  */
 
     /* 2: Separação de trabalho e envio para os escravos */
-    MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD); // Primeiro
+    // Primeiro
+    MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
-    for (int i = 1; i < processes-2; i++) {
-      MPI_Send((prev*i - size), (lines+2)*size, MPI_UNSIGNED_CHAR, i, 0, MPI_COMM_WORLD); // Primeiro
-    }
+    // Intermediários
+    for (int i = 1; i < processes-2; i++)
+      MPI_Send((prev*i - size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
 
-    MPI_Send((prev*(processes-1)-size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, processes-1, 0, MPI_COMM_WORLD); // ultimo
+    // Último
+    MPI_Send((prev*(processes-2)-size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, processes-1, 0, MPI_COMM_WORLD);
     /* Fim 2 */
 
     /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
+
+    /***  PRECISA VERIFICAR SE ESTA MANDANDO E RECEBENDO A PARTE CORRETA ***/
+
+    MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
+
+    // Intermediários
+    for (int i = 1; i < processes-2; i++)
+      MPI_Recv((prev*i), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+
+    // Último
+    MPI_Recv((prev*(processes-2)), (last_lines*size), MPI_UNSIGNED_CHAR, processes-1, 0, MPI_COMM_WORLD, NULL);
+
     #ifdef RESULT
     printf("Final:\n");
     print (prev, size);
@@ -91,9 +106,10 @@ int main () {
 
   } else {
     /* 1: Recebe tamanhos e alocagem de memória */
-    int size, lines;
+    int size, steps, lines;
     cell_t *prev, *next, *tmp;
     MPI_Recv(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+    MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
     MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
 
     if (rank == 0) {
