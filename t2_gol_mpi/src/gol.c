@@ -32,9 +32,6 @@ int main (int argc, char *argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &processes);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-
-    printf("\n.......\n");
-
   if (rank == 0) {
     /* 1: Alocar memória e ler o tabuleiro */
     int size, steps;
@@ -42,15 +39,16 @@ int main (int argc, char *argv[]) {
     f = stdin;
     fscanf(f, "%d %d", &size, &steps);
 
-    printf("0 chegou at'e aqui");
+    printf("size: %d e steps: %d\n", size, steps);
 
-    MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    /*MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    /* Avisa para os filhos os tamanho das matrizes deles */
+    // Avisa para os filhos os tamanho das matrizes deles
     float precision = size/processes;
     int lines = (int) precision;
     lines += precision - lines <= 0.5 ? 0 : 1;
+
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Ultimo processo pode ter linhas a mais ou a menos.
@@ -66,9 +64,9 @@ int main (int argc, char *argv[]) {
     printf("Initial:\n");
     print(prev, size);
     #endif
-    /* Fim 1  */
+    // Fim 1
 
-    /* 2: Separação de trabalho e envio para os escravos */
+    // 2: Separação de trabalho e envio para os escravos
     // Primeiro
     MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
@@ -79,9 +77,9 @@ int main (int argc, char *argv[]) {
 
     // Último
     MPI_Send((prev + (i*lines-1)*size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
-    /* Fim 2 */
+    // Fim 2
 
-    /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
+    // 3: Espera pelo cálculo, imprime resultado e desaloca memória
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
 
     // Intermediários: i => n# processo-1
@@ -97,22 +95,25 @@ int main (int argc, char *argv[]) {
     #endif
 
     free(prev);
-    /* Fim 3 */
+    // Fim 3
+    */
 
   } else {
-    /* 1: Recebe tamanhos e alocagem de memória */
+    // 1: Recebe tamanhos e alocagem de memória
     int size, steps, lines;
     cell_t *prev, *next, *tmp;
 
-    MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    printf("rank dentro do if %d\n", rank);
+
+    /*MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    MPI_Recv(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
-    MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
-    MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+    //MPI_Recv(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+    //MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+    //MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
 
-    /** MUITAS PARTES IGUAIS, DA PRA ABSTRAIR??? **/
+    // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
 
     if (rank == 1) {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
@@ -178,9 +179,9 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
     }
-    /* Fim 1 */
+    // Fim 1
 
-    /*for (int i = 0; i < steps; ++i) {
+    for (int i = 0; i < steps; ++i) {
       play (prev,next,size);
 
       #ifdef DEBUG
@@ -191,10 +192,10 @@ int main (int argc, char *argv[]) {
       tmp = next;
       next = prev;
       prev = tmp;
-    }*/
+    }
 
     free(prev);
-    free(next);
+    free(next); */
   }
 
   MPI_Finalize();
