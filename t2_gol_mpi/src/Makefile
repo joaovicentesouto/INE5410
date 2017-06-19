@@ -3,7 +3,7 @@ CC=mpicc
 FLAGS=-O3 -Wno-unused-result
 #LDFLAGS=-lpthread
 #DEBUG=-DDEBUG
-RESULT=-DRESULT
+#RESULT=-DRESULT
 
 all: gol
 

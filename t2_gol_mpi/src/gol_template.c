@@ -91,6 +91,7 @@ int main () {
   FILE *f;
   f = stdin;
   fscanf(f,"%d %d", &size, &steps);
+  printf("Size: %d e steps: %d\n", size, steps);
 
   cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
   read_file (f, prev,size);

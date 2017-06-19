@@ -40,8 +40,6 @@ int main (int argc, char *argv[]) {
     f = stdin;
     fscanf(f, "%d %d", &size, &steps);
 
-    printf("size: %d e steps: %d\n", size, steps);
-
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -62,8 +60,8 @@ int main (int argc, char *argv[]) {
     fclose(f);
 
     //#ifdef DEBUG
-    printf("Initial:\n");
-    print(prev, size);
+    //printf("Initial:\n");
+    //print(prev, size);
     //#endif
     // Fim 1
 
@@ -91,8 +89,8 @@ int main (int argc, char *argv[]) {
     MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
     //#ifdef RESULT
-    printf("Final:\n");
-    print (prev, size);
+    //printf("Final:\n");
+    //print (prev, size);
     //#endif
 
     free(prev);
@@ -121,6 +119,7 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
+        // envia primeiro
         MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
         MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
       }
@@ -141,8 +140,15 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
-        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
-        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
+        if (rank % 2 == 1) {
+          // envia primeiro
+          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
+        } else {
+          // recebe primeiro
+          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
+        }
         // irecv???
       }
 
@@ -161,11 +167,17 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
-        MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
-        MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-        // irecv???
+        if (rank % 2 == 1) { // envia primeiro
+          MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+          MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
+        } else { // recebe primeiro
+          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+          MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
+          MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        }// irecv???
       }
 
       // devolve resultado
@@ -173,7 +185,8 @@ int main (int argc, char *argv[]) {
 
     }
     // Fim 1
-
+    free(prev);
+    free(next);
   }
 
   MPI_Finalize();
