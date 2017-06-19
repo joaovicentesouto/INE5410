@@ -25,12 +25,15 @@ void read_file(FILE * f, cell_t * board, int size);
 int adjacent_to(cell_t * board, int size, int i, int j);
 void play(cell_t * board, cell_t * newboard, int beg, int end, int size);
 
-int main () {
+int main (int argc, char *argv[]) {
   int processes, rank;
 
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &processes);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+
+    printf("\n.......\n");
 
   if (rank == 0) {
     /* 1: Alocar memória e ler o tabuleiro */
@@ -39,18 +42,20 @@ int main () {
     f = stdin;
     fscanf(f, "%d %d", &size, &steps);
 
+    printf("0 chegou at'e aqui");
+
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     /* Avisa para os filhos os tamanho das matrizes deles */
     float precision = size/processes;
     int lines = (int) precision;
-    lines += precision - integer_part <= 0.5 ? 0 : 1;
+    lines += precision - lines <= 0.5 ? 0 : 1;
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Ultimo processo pode ter linhas a mais ou a menos.
-    int last_lines += line + (size - line*(processes-1));
-    MPI_Send(&last_lines, 1, MPI_INT, processes-1, 0, MPI_COMM_WORLD);
+    int last_lines = lines + (size - lines*(processes-1));
+    MPI_Send(&last_lines, 1, MPI_INT, (processes-1), 0, MPI_COMM_WORLD);
 
     cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
 
@@ -92,13 +97,17 @@ int main () {
     #endif
 
     free(prev);
-    free(next);
     /* Fim 3 */
 
   } else {
     /* 1: Recebe tamanhos e alocagem de memória */
     int size, steps, lines;
     cell_t *prev, *next, *tmp;
+
+    MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     MPI_Recv(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
     MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
     MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
@@ -125,7 +134,7 @@ int main () {
       // devolve resultado
       MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-    } else of (rank == processes-1) {
+    } else if (rank == processes-1) {
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
@@ -184,6 +193,8 @@ int main () {
       prev = tmp;
     }*/
 
+    free(prev);
+    free(next);
   }
 
   MPI_Finalize();
