@@ -18,18 +18,12 @@
 typedef unsigned char cell_t;
 
 /* Functions performed by the master */
-void print (cell_t * board, int size);
-void read_file (FILE * f, cell_t * board, int size);
+void print(cell_t * board, int size);
+void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
-int adjacent_to (cell_t * board, int size, int i, int j);
-void play (cell_t * board, cell_t * newboard, int size);
-
-int division_of_work(int slaves, int size) {
-  float precision = size/processes;
-  int integer_part = (int) precision;
-  return integer_part + (precision - integer_part <= 0.5 ? 0 : 1);
-}
+int adjacent_to(cell_t * board, int size, int i, int j);
+void play(cell_t * board, cell_t * newboard, int size);
 
 int main () {
   int processes, rank;
@@ -109,23 +103,75 @@ int main () {
     MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
     MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
 
-    if (rank == 0) {
+    /** MUITAS PARTES IGUAIS, DA PRA ABSTRAIR??? **/
+
+    if (rank == 1) {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
+      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 0, lines, size);
+
+        tmp = next;
+        next = prev;
+        prev = tmp;
+
+        MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
+        MPI_Recv((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
+        // irecv???
+      }
+
+      // devolve resultado
+      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
     } else of (rank == processes-1) {
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
+      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 1, lines, size);
+
+        tmp = next;
+        next = prev;
+        prev = tmp;
+
+        MPI_Send(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+        // irecv???
+      }
+
+      // devolve resultado
+      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
     } else {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
+      MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 1, lines, size);
+
+        tmp = next;
+        next = prev;
+        prev = tmp;
+
+        MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        MPI_Send(prev, size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
+        MPI_Recv((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+        // irecv???
+      }
+
+      // devolve resultado
+      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
     }
     /* Fim 1 */
 
-    for (int i = 0; i < steps; ++i) {
+    /*for (int i = 0; i < steps; ++i) {
       play (prev,next,size);
 
       #ifdef DEBUG
@@ -136,7 +182,7 @@ int main () {
       tmp = next;
       next = prev;
       prev = tmp;
-    }
+    }*/
 
   }
 
@@ -145,7 +191,7 @@ int main () {
 }
 
 /* return the number of on cells adjacent to the i,j cell */
-int adjacent_to (cell_t * board, int size, int i, int j) {
+int adjacent_to(cell_t * board, int size, int i, int j) {
   // Fonte: João Meyer
   int count = 0,
       linha = i*size,
@@ -178,22 +224,28 @@ int adjacent_to (cell_t * board, int size, int i, int j) {
   return count;
 }
 
-void play (cell_t * board, cell_t * newboard, int size) {
+void play(cell_t * board, cell_t * newboard, int beg, int end, int size) {
   int	a, position;
   /* for each cell, apply the rules of Life */
-  for (int i = 0; i < size; ++i)
-  for (int j = 0; j < size; ++j) {
-    position = i*size + j;
-    a = adjacent_to (board, size, i, j);
-    if (a == 2) newboard[position] = board[position];
-    if (a == 3) newboard[position] = 1;
-    if (a < 2) newboard[position] = 0;
-    if (a > 3) newboard[position] = 0;
+  for (int i = beg; i <= end; ++i) {
+    for (int j = 0; j < size; ++j) {
+      position = i*size + j;
+      a = adjacent_to (board, size, i, j);
+      // switch is better???
+      if (a == 2)
+        newboard[position] = board[position];
+      else if (a == 3)
+        newboard[position] = 1;
+      else if (a < 2)
+        newboard[position] = 0;
+      else //if (a > 3)
+        newboard[position] = 0;
+    }
   }
 }
 
 /* print the life board */
-void print (cell_t * board, int size) {
+void print(cell_t * board, int size) {
   for (int j = 0; j < size; ++j) {  // For each row
     for (int i = 0; i < size; ++i)  // Print each column position...
       printf ("%c", board[i*size + j] ? 'x' : ' ');
@@ -202,7 +254,7 @@ void print (cell_t * board, int size) {
 }
 
 /* read a file into the life board */
-void read_file (FILE * f, cell_t * board, int size) {
+void read_file(FILE * f, cell_t * board, int size) {
   char	*s = (char *) malloc(size+10);
   fgets (s, size+10,f);                 // Ignore first line
 
