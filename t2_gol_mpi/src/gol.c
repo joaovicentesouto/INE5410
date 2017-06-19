@@ -45,18 +45,17 @@ int main (int argc, char *argv[]) {
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Avisa para os filhos os tamanho das matrizes deles
-    float precision = size/processes;
+    float precision = ((float)size)/((float)(processes-1));
     int lines = (int) precision;
     lines += precision - lines <= 0.5 ? 0 : 1;
 
-    printf("Linhas => %d\n", lines);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Ultimo processo pode ter linhas a mais ou a menos.
-    /*int last_lines = lines + (size - lines*(processes-1));
+    int last_lines = lines + (size - lines*(processes-1));
     MPI_Send(&last_lines, 1, MPI_INT, (processes-1), 0, MPI_COMM_WORLD);
 
-    cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
+    /*cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
 
     read_file (f, prev, size);
     fclose(f);
@@ -106,18 +105,12 @@ int main (int argc, char *argv[]) {
 
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    printf("r: %d com size: %d e steps: %d\n", rank, size, steps);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    printf("r: %d => %d\n", rank, lines);
-    /*
-    //MPI_Recv(&size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
-    //MPI_Recv(&steps, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
-    //MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
 
     // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
 
     if (rank == 1) {
-      prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
+      /*prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
@@ -135,9 +128,11 @@ int main (int argc, char *argv[]) {
 
       // devolve resultado
       MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+      */
 
     } else if (rank == processes-1) {
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+      /*MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
@@ -156,9 +151,9 @@ int main (int argc, char *argv[]) {
 
       // devolve resultado
       MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-
+      */
     } else {
-      prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
+      /*prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
@@ -178,11 +173,11 @@ int main (int argc, char *argv[]) {
 
       // devolve resultado
       MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-
+      */
     }
     // Fim 1
 
-    for (int i = 0; i < steps; ++i) {
+    /*for (int i = 0; i < steps; ++i) {
       play (prev,next,size);
 
       #ifdef DEBUG
@@ -193,10 +188,10 @@ int main (int argc, char *argv[]) {
       tmp = next;
       next = prev;
       prev = tmp;
-    }
+    }*/
 
-    free(prev);
-    free(next); */
+    //free(prev);
+    //free(next);
   }
 
   MPI_Finalize();
