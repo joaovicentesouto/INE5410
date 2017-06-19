@@ -22,6 +22,7 @@ void print(cell_t * board, int size);
 void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
+void print_slave(cell_t * board, int size, int lines);
 int adjacent_to(cell_t * board, int size, int i, int j);
 void play(cell_t * board, cell_t * newboard, int beg, int end, int size);
 
@@ -68,10 +69,10 @@ int main (int argc, char *argv[]) {
 
     // 2: Separação de trabalho e envio para os escravos
     // Primeiro
-    /*MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
+    MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
     // Intermediários: i => n# processo-1
-    int i;
+    /*int i;
     for (i = 1; i < processes-2; i++)
       MPI_Send((prev + (i*lines-1)*size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
 
@@ -110,11 +111,13 @@ int main (int argc, char *argv[]) {
     // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
 
     if (rank == 1) {
-      /*prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
+      prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      for (int i = 0; i < steps; ++i) {
+      print_slave(prev, size, lines+1);
+
+      /*for (int i = 0; i < steps; ++i) {
         play(prev, next, 0, lines, size);
 
         tmp = next;
@@ -256,6 +259,15 @@ void play(cell_t * board, cell_t * newboard, int beg, int end, int size) {
 void print(cell_t * board, int size) {
   for (int j = 0; j < size; ++j) {  // For each row
     for (int i = 0; i < size; ++i)  // Print each column position...
+      printf ("%c", board[i*size + j] ? 'x' : ' ');
+    printf ("\n");  // End line
+  }
+}
+
+/* print the life board */
+void print_slave(cell_t * board, int size, int lines) {
+  for (int j = 0; j < size; ++j) {  // For each row
+    for (int i = 0; i < lines; ++i)  // Print each column position...
       printf ("%c", board[i*size + j] ? 'x' : ' ');
     printf ("\n");  // End line
   }
