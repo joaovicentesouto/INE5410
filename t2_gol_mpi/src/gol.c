@@ -23,7 +23,7 @@ void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
 int adjacent_to(cell_t * board, int size, int i, int j);
-void play(cell_t * board, cell_t * newboard, int size);
+void play(cell_t * board, cell_t * newboard, int beg, int end, int size);
 
 int main () {
   int processes, rank;
