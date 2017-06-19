@@ -23,8 +23,8 @@ void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
 void print_slave(cell_t * board, int size, int lines);
-int adjacent_to(cell_t * board, int size, int i, int j);
-void play(cell_t * board, cell_t * newboard, int beg, int end, int size);
+int adjacent_to(cell_t * board, int lines, int size, int i, int j);
+void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lines);
 
 int main (int argc, char *argv[]) {
   int processes, rank;
@@ -82,8 +82,6 @@ int main (int argc, char *argv[]) {
 
     // 3: Espera pelo cálculo, imprime resultado e desaloca memória
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
-    printf("Recebi do filho 1:\n");
-    print(prev, size);
 
     // Intermediários: i => n# processo-1
     for (i = 1; i < processes-2; i++)
@@ -115,33 +113,20 @@ int main (int argc, char *argv[]) {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-
-      for (int j = 0; j < size; ++j) {
-        prev[(lines-1)*size + j] = 1;
-      }
       
-      MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
-      MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
-      printf("rank %d mandou pros irmaos\n", rank);
-
-      // envia pro mestre
-      MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
-
-      /*for (int i = 0; i < steps; ++i) {
-        play(prev, next, 0, lines, size);
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 0, lines, size, lines+1);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
         MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
-        MPI_Recv((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
-        // irecv???
+        MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
       }
 
       // devolve resultado
-      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-      */
+      MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else if (rank == processes-1) {
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
@@ -149,88 +134,46 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      for (int j = 0; j < size; ++j) {
-        prev[size + j] = 1;
-      }
-      //print_slave(prev, size, lines+1);
-
-      MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
-      MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
-      printf("rank %d mandou pros irmaos\n", rank);
-
-      // envia pro mestre
-      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
-
-      /*for (int i = 0; i < steps; ++i) {
-        play(prev, next, 1, lines, size);
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 1, lines, size, lines+1);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        MPI_Send(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
+        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
         // irecv???
       }
 
       // devolve resultado
-      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-      */
+      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
+
     } else {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      for (int j = 0; j < size; ++j) {
-        prev[size + j] = 1;
-        prev[lines*size + j] = 1;
-      }
-      //print_slave(prev, size, lines+2);
-
-      MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-      MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-      MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
-      MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-      printf("rank %d mandou pros irmaos\n", rank);
-
-      // envia pro mestre
-      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
-
-      /*for (int i = 0; i < steps; ++i) {
-        play(prev, next, 1, lines, size);
+      for (int i = 0; i < steps; ++i) {
+        play(prev, next, 1, lines, size, lines+2);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-        MPI_Send(prev, size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-        MPI_Recv((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+        MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+        MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
         // irecv???
       }
 
       // devolve resultado
-      MPI_Recv(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-      */
+      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
+
     }
     // Fim 1
 
-    /*for (int i = 0; i < steps; ++i) {
-      play (prev,next,size);
-
-      #ifdef DEBUG
-      printf("%d ----------\n", i + 1);
-      print (next,size);
-      #endif
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
-    }*/
-
-    //free(prev);
-    //free(next);
   }
 
   MPI_Finalize();
@@ -238,55 +181,49 @@ int main (int argc, char *argv[]) {
 }
 
 /* return the number of on cells adjacent to the i,j cell */
-int adjacent_to(cell_t * board, int size, int i, int j) {
+int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
   // Fonte: João Meyer
-  int count = 0,
-      linha = i*size,
-      linha_prox = linha + size;
-
-  if (i-1 > 0) {
-      int linha_ant = linha - size;
-      count += board[linha_ant + j];
-      if (j - 1 > 0)
-          count += board[linha_ant + j-1];
+  int count = 0;
+  if (i > 0) {
+      count += board[(i-1)*size + j];
+      if (j > 1)
+          count += board[(i-1)*size + j-1];
       if (j+1 < size)
-          count += board[linha_ant + j+1];
+          count += board[(i-1)*size + j+1];
   }
 
-  if (j-1 > 0) {
-      count += board[linha + j-1];
-      if (i+1 < size)
-          count += board[linha_prox + j-1];
+  if (j > 1) {
+      count += board[i*size + j-1];
+      if (i+1 < lines)
+          count += board[(i+1)*size + j-1];
   }
 
-  if (i+1 < size) {
-      count += board[linha_prox + j];
+  if (i+1 < lines) {
+      count += board[(i+1)*size + j];
       if (j+1 < size)
-          count += board[linha_prox + j+1];
+          count += board[(i+1)*size + j+1];
   }
 
   if (j+1 < size)
-      count += board[linha + j+1];
+      count += board[i*size + j+1];
 
   return count;
 }
 
-void play(cell_t * board, cell_t * newboard, int beg, int end, int size) {
+void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lines) {
   int	a, position;
   /* for each cell, apply the rules of Life */
   for (int i = beg; i <= end; ++i) {
     for (int j = 0; j < size; ++j) {
       position = i*size + j;
-      a = adjacent_to (board, size, i, j);
+      a = adjacent_to(board, lines, size, i, j);
       // switch is better???
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
         newboard[position] = 1;
-      else //if (a < 2) && if (a > 3)
+      else
         newboard[position] = 0;
-      //else 
-        //newboard[position] = 0;
     }
   }
 }
