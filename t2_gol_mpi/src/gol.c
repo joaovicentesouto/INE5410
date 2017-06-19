@@ -55,20 +55,20 @@ int main (int argc, char *argv[]) {
     int last_lines = lines + (size - lines*(processes-1));
     MPI_Send(&last_lines, 1, MPI_INT, (processes-1), 0, MPI_COMM_WORLD);
 
-    /*cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
+    cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
 
-    read_file (f, prev, size);
+    read_file(f, prev, size);
     fclose(f);
 
-    #ifdef DEBUG
+    //#ifdef DEBUG
     printf("Initial:\n");
     print(prev, size);
-    #endif
+    //#endif
     // Fim 1
 
     // 2: Separação de trabalho e envio para os escravos
     // Primeiro
-    MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
+    /*MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
     // Intermediários: i => n# processo-1
     int i;
@@ -244,10 +244,10 @@ void play(cell_t * board, cell_t * newboard, int beg, int end, int size) {
         newboard[position] = board[position];
       else if (a == 3)
         newboard[position] = 1;
-      else if (a < 2)
+      else //if (a < 2) && if (a > 3)
         newboard[position] = 0;
-      else //if (a > 3)
-        newboard[position] = 0;
+      //else 
+        //newboard[position] = 0;
     }
   }
 }
@@ -271,4 +271,5 @@ void read_file(FILE * f, cell_t * board, int size) {
     for (int i = 0; i < size; ++i)      // For to set cells
       board[i*size + j] = s[i] == 'x';  // Set cells
   }
+  free(s);
 }
