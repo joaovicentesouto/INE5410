@@ -81,7 +81,9 @@ int main (int argc, char *argv[]) {
     // Fim 2
 
     // 3: Espera pelo cálculo, imprime resultado e desaloca memória
-    /*MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
+    MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
+    printf("Recebi do filho 1:\n");
+    print(prev, size);
 
     // Intermediários: i => n# processo-1
     for (i = 1; i < processes-2; i++)
@@ -90,14 +92,13 @@ int main (int argc, char *argv[]) {
     // Último
     MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
-    #ifdef RESULT
+    //#ifdef RESULT
     printf("Final:\n");
     print (prev, size);
-    #endif
+    //#endif
 
     free(prev);
     // Fim 3
-    */
 
   } else {
     // 1: Recebe tamanhos e alocagem de memória
@@ -115,7 +116,16 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      //print_slave(prev, size, lines+1);
+      for (int j = 0; j < size; ++j) {
+        prev[(lines-1)*size + j] = 1;
+      }
+      
+      MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
+      MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
+      printf("rank %d mandou pros irmaos\n", rank);
+
+      // envia pro mestre
+      MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
       /*for (int i = 0; i < steps; ++i) {
         play(prev, next, 0, lines, size);
@@ -139,7 +149,17 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
+      for (int j = 0; j < size; ++j) {
+        prev[size + j] = 1;
+      }
       //print_slave(prev, size, lines+1);
+
+      MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
+      MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
+      printf("rank %d mandou pros irmaos\n", rank);
+
+      // envia pro mestre
+      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
       /*for (int i = 0; i < steps; ++i) {
         play(prev, next, 1, lines, size);
@@ -161,7 +181,20 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      print_slave(prev, size, lines+1);
+      for (int j = 0; j < size; ++j) {
+        prev[size + j] = 1;
+        prev[lines*size + j] = 1;
+      }
+      //print_slave(prev, size, lines+2);
+
+      MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+      MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+      MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
+      MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
+      printf("rank %d mandou pros irmaos\n", rank);
+
+      // envia pro mestre
+      MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
       /*for (int i = 0; i < steps; ++i) {
         play(prev, next, 1, lines, size);
