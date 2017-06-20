@@ -62,7 +62,7 @@ int main (int argc, char *argv[]) {
     read_file(f, prev, size);
     fclose(f);
 
-    #ifdef DEBUG
+    #ifdef RESULT
     printf("Initial:\n");
     print(prev, size);
     #endif
@@ -78,6 +78,18 @@ int main (int argc, char *argv[]) {
 
     MPI_Send((prev + (i*lines-1)*size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
     /* Fim 2 */
+
+    #ifdef DEBUG
+    for (int k = 0; k < steps; ++k) {
+      MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
+      for (i = 1; i < processes-2; i++)
+        MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+      MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+      
+      printf("Geracao steps: %d\n", k+1);
+      print (prev, size);
+    }
+    #endif
 
     /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
@@ -123,6 +135,10 @@ int main (int argc, char *argv[]) {
         // envia primeiro
         MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
         MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
+
+        #ifdef DEBUG
+        MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
+        #endif
       }
 
       // devolve resultado
@@ -152,6 +168,10 @@ int main (int argc, char *argv[]) {
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
         }
         // irecv???
+
+        #ifdef DEBUG
+        MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
+        #endif
       }
 
       // devolve resultado
@@ -180,6 +200,10 @@ int main (int argc, char *argv[]) {
           MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
         }// irecv???
+
+        #ifdef DEBUG
+        MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
+        #endif
       }
 
       // devolve resultado
