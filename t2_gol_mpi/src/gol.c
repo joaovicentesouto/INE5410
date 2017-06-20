@@ -22,7 +22,6 @@ void print(cell_t * board, int size);
 void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
-void print_slave(cell_t * board, int size, int lines);
 int adjacent_to(cell_t * board, int lines, int size, int i, int j);
 void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lines);
 
@@ -271,15 +270,6 @@ void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lin
 void print(cell_t * board, int size) {
   for (int j = 0; j < size; ++j) {  // For each row
     for (int i = 0; i < size; ++i)  // Print each column position...
-      printf ("%c", board[i*size + j] ? 'x' : ' ');
-    printf ("\n");  // End line
-  }
-}
-
-/* print the life board */
-void print_slave(cell_t * board, int size, int lines) {
-  for (int j = 0; j < size; ++j) {  // For each row
-    for (int i = 0; i < lines; ++i)  // Print each column position...
       printf ("%c", board[i*size + j] ? 'x' : ' ');
     printf ("\n");  // End line
   }
