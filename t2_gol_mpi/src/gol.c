@@ -44,6 +44,9 @@ int main (int argc, char *argv[]) {
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     // Avisa para os filhos os tamanho das matrizes deles
+    // Se a parte quebrada da divisão <= 0.5 então arredondamos
+    // para baixo, se não pra cima, porque assim fica melhor
+    // distribuido a quantidade de linhas por processos
     float precision = ((float)size)/((float)(processes-1));
     int lines = (int) precision;
     lines += precision - lines <= 0.5 ? 0 : 1;
@@ -59,59 +62,57 @@ int main (int argc, char *argv[]) {
     read_file(f, prev, size);
     fclose(f);
 
-    //#ifdef DEBUG
-    //printf("Initial:\n");
-    //print(prev, size);
-    //#endif
-    // Fim 1
+    #ifdef DEBUG
+    printf("Initial:\n");
+    print(prev, size);
+    #endif
+    /* Fim 1 */
 
-    // 2: Separação de trabalho e envio para os escravos
-    // Primeiro
+    /* 2: Separação de trabalho e envio para os escravos */
+    int i;
+
     MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
 
-    // Intermediários: i => n# processo-1
-    int i;
     for (i = 1; i < processes-2; i++)
       MPI_Send((prev + (i*lines-1)*size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
 
-    // Último
     MPI_Send((prev + (i*lines-1)*size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
-    // Fim 2
+    /* Fim 2 */
 
-    // 3: Espera pelo cálculo, imprime resultado e desaloca memória
+    /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
 
-    // Intermediários: i => n# processo-1
     for (i = 1; i < processes-2; i++)
       MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
-    // Último
     MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
-    //#ifdef RESULT
-    //printf("Final:\n");
-    //print (prev, size);
-    //#endif
+    #ifdef RESULT
+    printf("Final:\n");
+    print (prev, size);
+    #endif
 
     free(prev);
-    // Fim 3
+    /* Fim 3 */
 
   } else {
-    // 1: Recebe tamanhos e alocagem de memória
+    /* 1: Recebe tamanhos por broadcast */
     int size, steps, lines;
     cell_t *prev, *next, *tmp;
 
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    /* Fim 1 */
 
     // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
 
+    /* 2: Primeiro e ultimo => casos especiais */
     if (rank == 1) {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
-      
+
       for (int i = 0; i < steps; ++i) {
         play(prev, next, 0, lines, size, lines+1);
 
@@ -142,8 +143,9 @@ int main (int argc, char *argv[]) {
 
         if (rank % 2 == 1) {
           // envia primeiro
-          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
+          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
+          // Esta invertido?
         } else {
           // recebe primeiro
           MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
