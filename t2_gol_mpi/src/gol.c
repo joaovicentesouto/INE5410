@@ -23,7 +23,7 @@ void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
 int adjacent_to(cell_t * board, int lines, int size, int i, int j);
-void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lines);
+void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
 
 int main (int argc, char *argv[]) {
   int processes, rank;
@@ -33,7 +33,9 @@ int main (int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if (rank == 0) {
-    /* 1: Alocar memória e ler o tabuleiro */
+
+    /*===============================================================*/
+    /* 1: Leitura do tamanho e geracoes e broadcast para os escravos */
     int size, steps;
     FILE *f;
     f = stdin;
@@ -42,22 +44,24 @@ int main (int argc, char *argv[]) {
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Avisa para os filhos os tamanho das matrizes deles
-    // Se a parte quebrada da divisão <= 0.5 então arredondamos
-    // para baixo, se não pra cima, porque assim fica melhor
-    // distribuido a quantidade de linhas por processos
+    /*===============================================================*/
+    /* Define quant. de linhas, balanceando para que fique o mais    */
+    /* distribuido possivel. Criterio: parte quebrada da divisão     */
+    /* <= 0.5 -> parte inteira | se nao -> parte inteira+1           */
     float precision = ((float)size)/((float)(processes-1));
     int lines = (int) precision;
     lines += precision - lines <= 0.5 ? 0 : 1;
 
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Ultimo processo pode ter linhas a mais ou a menos.
+    /*===============================================================*/
+    /* Ultimo processo pode ter mais ou menos linhas.                */
     int last_lines = lines + (size - lines*(processes-1));
     MPI_Send(&last_lines, 1, MPI_INT, (processes-1), 0, MPI_COMM_WORLD);
 
+    /*===============================================================*/
+    /* Alocando a matriz e lendo do arquivo                          */
     cell_t * prev = (cell_t *) malloc(sizeof(cell_t) * size * size);
-
     read_file(f, prev, size);
     fclose(f);
 
@@ -65,18 +69,14 @@ int main (int argc, char *argv[]) {
     printf("Initial:\n");
     print(prev, size);
     #endif
-    /* Fim 1 */
 
-    /* 2: Separação de trabalho e envio para os escravos */
+    /*===============================================================*/
+    /* 2: Envio das linhas para os escravos (+linhas para observacao)*/
     int i;
-
     MPI_Send(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD);
-
     for (i = 1; i < processes-2; i++)
       MPI_Send((prev + (i*lines-1)*size), (lines+2)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
-
     MPI_Send((prev + (i*lines-1)*size), (last_lines+1)*size, MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD);
-    /* Fim 2 */
 
     #ifdef DEBUG
     for (int k = 0; k < steps; ++k) {
@@ -90,12 +90,11 @@ int main (int argc, char *argv[]) {
     }
     #endif
 
-    /* 3: Espera pelo cálculo, imprime resultado e desaloca memória */
+    /*===============================================================*/
+    /* 3: Espera pelo cálculo, imprime resultado e desaloca memória  */
     MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
-
     for (i = 1; i < processes-2; i++)
       MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
-
     MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
 
     #ifdef RESULT
@@ -104,7 +103,6 @@ int main (int argc, char *argv[]) {
     #endif
 
     free(prev);
-    /* Fim 3 */
 
   } else {
     /* 1: Recebe tamanhos por broadcast */
@@ -125,7 +123,7 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        play(prev, next, 0, lines, size, lines+1);
+        play(prev, next, size, lines+1, 0, lines);
 
         tmp = next;
         next = prev;
@@ -150,7 +148,7 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        play(prev, next, 1, lines, size, lines+1);
+        play(prev, next, size, lines+1, 1, lines);
 
         tmp = next;
         next = prev;
@@ -182,7 +180,7 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        play(prev, next, 1, lines, size, lines+2);
+        play(prev, next, size, lines+2, 1, lines);
 
         tmp = next;
         next = prev;
@@ -248,7 +246,7 @@ int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
   return count;
 }
 
-void play(cell_t * board, cell_t * newboard, int beg, int end, int size, int lines) {
+void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
   int	a, position;
   /* for each cell, apply the rules of Life */
   for (int i = beg; i <= end; ++i) {
