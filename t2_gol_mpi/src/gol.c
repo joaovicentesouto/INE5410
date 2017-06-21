@@ -105,31 +105,36 @@ int main (int argc, char *argv[]) {
     free(prev);
 
   } else {
-    /* 1: Recebe tamanhos por broadcast */
+
+    /*===============================================================*/
+    /* 1: Recebe tamanho, geracoes e linhas por broadcast            */
     int size, steps, lines;
     cell_t *prev, *next, *tmp;
 
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    /* Fim 1 */
 
     // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
 
-    /* 2: Primeiro e ultimo => casos especiais */
+    /*===============================================================*/
+    /* 2: Primeiro e ultimo processos sao casos especiais            */
     if (rank == 1) {
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
+        /*===========================================================*/
+        /* __, tam. linha, tam. board, linha inicial, linha final    */
         play(prev, next, size, lines+1, 0, lines);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        // envia primeiro
+        /*===========================================================*/
+        /* rank % 2 == 1  =>  envia primeiro                         */
         MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
         MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
 
@@ -138,7 +143,8 @@ int main (int argc, char *argv[]) {
         #endif
       }
 
-      // devolve resultado
+      /*===========================================================*/
+      /* Envia resultado final, apenas as linhas que importam.     */
       MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else if (rank == processes-1) {
@@ -154,13 +160,12 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
+        /*===========================================================*/
+        /* rank % 2 == 1 => envia primeiro | == 0 => recebe primeiro */
         if (rank % 2 == 1) {
-          // envia primeiro
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
           MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
-          // Esta invertido?
         } else {
-          // recebe primeiro
           MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
         }
@@ -171,7 +176,8 @@ int main (int argc, char *argv[]) {
         #endif
       }
 
-      // devolve resultado
+      /*===========================================================*/
+      /* Envia resultado final, apenas as linhas que importam.     */
       MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else {
@@ -186,12 +192,14 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
-        if (rank % 2 == 1) { // envia primeiro
+        /*===========================================================*/
+        /* rank % 2 == 1 => envia primeiro | == 0 => recebe primeiro */
+        if (rank % 2 == 1) {
           MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
           MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
           MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
           MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-        } else { // recebe primeiro
+        } else {
           MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
           MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
           MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
@@ -203,11 +211,14 @@ int main (int argc, char *argv[]) {
         #endif
       }
 
-      // devolve resultado
+      /*===========================================================*/
+      /* Envia resultado final, apenas as linhas que importam      */
       MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     }
-    // Fim 1
+    
+    /*============================================================*/
+    /* Desaloca memoria e vai embora                              */
     free(prev);
     free(next);
   }
