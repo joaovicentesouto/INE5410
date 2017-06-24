@@ -22,8 +22,14 @@ void print(cell_t * board, int size);
 void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
-int adjacent_to(cell_t * board, int lines, int size, int i, int j);
 void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
+int adjacent_to(cell_t * board, int lines, int size, int i, int j);
+
+int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
+int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
+int top_column_safe_adjacent_to(cell_t * board, int size, int i, int j);
+int bottom_column_safe_adjacent_to(cell_t * board, int size, int i, int j);
+int totally_safe_adjacent_to(cell_t * board, int size, int i, int j);
 
 int main (int argc, char *argv[]) {
   int processes, rank;
@@ -257,6 +263,72 @@ int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
   return count;
 }
 
+/* Pode acessar qualquer coluna, menos a coluna da esquerda */
+int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
+  int count = 0;
+  count += board[(i-1)*size + j];
+  count += board[(i-1)*size + j+1];
+
+  count += board[i*size + j+1];
+  
+  count += board[(i+1)*size + j];
+  count += board[(i+1)*size + j+1];
+  return count;
+}
+
+/* Pode acessar qualquer coluna, menos a coluna da direita */
+int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
+  int count = 0;
+  count += board[(i-1)*size + j-1];
+  count += board[(i-1)*size + j];
+
+  count += board[i*size + j-1];
+  
+  count += board[(i+1)*size + j-1];
+  count += board[(i+1)*size + j];
+  return count;
+}
+
+/* Pode acessar qualquer coluna, menos a linhas de cima */
+int top_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
+  int count = 0;
+  count += board[i*size + j-1];
+  count += board[i*size + j+1];
+
+  count += board[(i+1)*size + j-1];
+  count += board[(i+1)*size + j];
+  count += board[(i+1)*size + j+1];
+  return count;
+}
+
+/* Pode acessar qualquer coluna, menos a linhas de baixo */
+int bottom_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
+  int count = 0;
+  count += board[(i-1)*size + j-1];
+  count += board[(i-1)*size + j];
+  count += board[(i-1)*size + j+1];
+
+  count += board[i*size + j-1];
+  count += board[i*size + j+1];
+  return count;
+}
+
+/* Funcao usada quando eh totalmente seguro acessar ao redor da celular */
+int totally_safe_adjacent_to(cell_t * board, int size, int i, int j) {
+  int count = 0;
+  count += board[(i-1)*size + j-1];
+  count += board[(i-1)*size + j];
+  count += board[(i-1)*size + j+1];
+
+  count += board[i*size + j-1];
+  count += board[i*size + j+1];
+  
+  count += board[(i+1)*size + j-1];
+  count += board[(i+1)*size + j];
+  count += board[(i+1)*size + j+1];
+  return count;
+}
+
 void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
   int	a, position;
   /* for each cell, apply the rules of Life */
@@ -272,6 +344,103 @@ void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int e
       else
         newboard[position] = 0;
     }
+  }
+}
+
+void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
+  int a, position;
+  /* for each cell, apply the rules of Life */
+  if (beg == 0) {
+    a = adjacent_to(board, lines, size, 0, 0);
+    if (a == 2)
+      newboard[0] = board[0];
+    else if (a == 3)
+      newboard[0] = 1;
+    else
+      newboard[0] = 0;
+
+    for (int j = 1; j < size-1; ++j) {
+      a = top_column_safe_adjacent_to(board, size, 0, j);
+      if (a == 2)
+        newboard[j] = board[j];
+      else if (a == 3)
+        newboard[j] = 1;
+      else
+        newboard[j] = 0;
+    }
+
+    position = size-1;
+    a = adjacent_to(board, lines, size, 0, position);
+    if (a == 2)
+      newboard[position] = board[position];
+    else if (a == 3)
+      newboard[position] = 1;
+    else
+      newboard[position] = 0;
+
+    ++beg;
+  }
+
+  for (int i = beg; i < end; ++i) {
+    position = i*size;
+    a = left_line_safe_adjacent_to(board, size, i, 0);
+    if (a == 2)
+      newboard[position] = board[position];
+    else if (a == 3)
+      newboard[position] = 1;
+    else
+      newboard[position] = 0;
+
+    for (int j = 1; j < size-1; ++j) {
+      position = i*size + j;
+      a = totally_safe_adjacent_to(board, size, i, j);
+      if (a == 2)
+        newboard[position] = board[position];
+      else if (a == 3)
+        newboard[position] = 1;
+      else
+        newboard[position] = 0;
+    }
+
+    position = i*size + size-1;
+    a = right_line_safe_adjacent_to(board, size, i, position);
+    if (a == 2)
+      newboard[position] = board[position];
+    else if (a == 3)
+      newboard[position] = 1;
+    else
+      newboard[position] = 0;
+  }
+
+  if () {
+    a = adjacent_to(board, lines, size, 0, 0);
+    if (a == 2)
+      newboard[0] = board[0];
+    else if (a == 3)
+      newboard[0] = 1;
+    else
+      newboard[0] = 0;
+
+    for (int j = 1; j < size-1; ++j) {
+      a = top_column_safe_adjacent_to(board, size, 0, j);
+      if (a == 2)
+        newboard[j] = board[j];
+      else if (a == 3)
+        newboard[j] = 1;
+      else
+        newboard[j] = 0;
+    }
+
+    position = size-1;
+    a = adjacent_to(board, lines, size, 0, position);
+    if (a == 2)
+      newboard[position] = board[position];
+    else if (a == 3)
+      newboard[position] = 1;
+    else
+      newboard[position] = 0;
+
+    ++beg;
   }
 }
 
