@@ -23,8 +23,9 @@ void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
 void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
-int adjacent_to(cell_t * board, int lines, int size, int i, int j);
+void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
 
+int adjacent_to(cell_t * board, int lines, int size, int i, int j);
 int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
 int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
 int top_column_safe_adjacent_to(cell_t * board, int size, int i, int j);
@@ -133,7 +134,8 @@ int main (int argc, char *argv[]) {
       for (int i = 0; i < steps; ++i) {
         /*===========================================================*/
         /* __, tam. linha, tam. board, linha inicial, linha final    */
-        play(prev, next, size, lines+1, 0, lines);
+        //play(prev, next, size, lines+1, 0, lines-1);
+        play_optimized(prev, next, size, lines+1, 0, lines-1);
 
         tmp = next;
         next = prev;
@@ -160,7 +162,8 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        play(prev, next, size, lines+1, 1, lines);
+        //play(prev, next, size, lines+1, 1, lines);
+        play_optimized(prev, next, size, lines+1, 1, lines);
 
         tmp = next;
         next = prev;
@@ -192,7 +195,8 @@ int main (int argc, char *argv[]) {
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        play(prev, next, size, lines+2, 1, lines);
+        //play(prev, next, size, lines+2, 1, lines);
+        play_optimized(prev, next, size, lines+2, 1, lines);
 
         tmp = next;
         next = prev;
@@ -336,7 +340,6 @@ void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int e
     for (int j = 0; j < size; ++j) {
       position = i*size + j;
       a = adjacent_to(board, lines, size, i, j);
-      // switch is better???
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -347,8 +350,12 @@ void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int e
   }
 }
 
-void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
-  int a, position;
+void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
+  int a, position, end_inicial = end;
+  // Ajusta end
+  end = lines == end_inicial+1? end : end+1;
+  //printf("lines: %d, beg: %d, end: %d e soma: %d\n", lines-1, beg_inicial, end_inicial, beg_inicial+end_inicial);
+
   /* for each cell, apply the rules of Life */
   if (beg == 0) {
     a = adjacent_to(board, lines, size, 0, 0);
@@ -360,7 +367,8 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
       newboard[0] = 0;
 
     for (int j = 1; j < size-1; ++j) {
-      a = top_column_safe_adjacent_to(board, size, 0, j);
+      //a = top_column_safe_adjacent_to(board, size, 0, j);
+      a = adjacent_to(board, lines, size, 0, j);
       if (a == 2)
         newboard[j] = board[j];
       else if (a == 3)
@@ -383,7 +391,8 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
 
   for (int i = beg; i < end; ++i) {
     position = i*size;
-    a = left_line_safe_adjacent_to(board, size, i, 0);
+    //a = left_line_safe_adjacent_to(board, size, i, 0);
+    a = adjacent_to(board, lines, size, i, 0);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -393,7 +402,8 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
 
     for (int j = 1; j < size-1; ++j) {
       position = i*size + j;
-      a = totally_safe_adjacent_to(board, size, i, j);
+      //a = totally_safe_adjacent_to(board, size, i, j);
+      a = adjacent_to(board, lines, size, i, j);
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -403,7 +413,8 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
     }
 
     position = i*size + size-1;
-    a = right_line_safe_adjacent_to(board, size, i, position);
+    //a = right_line_safe_adjacent_to(board, size, i, size-1);
+    a = adjacent_to(board, lines, size, i, size-1);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -412,27 +423,9 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
       newboard[position] = 0;
   }
 
-  if () {
-    a = adjacent_to(board, lines, size, 0, 0);
-    if (a == 2)
-      newboard[0] = board[0];
-    else if (a == 3)
-      newboard[0] = 1;
-    else
-      newboard[0] = 0;
-
-    for (int j = 1; j < size-1; ++j) {
-      a = top_column_safe_adjacent_to(board, size, 0, j);
-      if (a == 2)
-        newboard[j] = board[j];
-      else if (a == 3)
-        newboard[j] = 1;
-      else
-        newboard[j] = 0;
-    }
-
-    position = size-1;
-    a = adjacent_to(board, lines, size, 0, position);
+  if (lines == end_inicial+1) {
+    position = end*size;
+    a = adjacent_to(board, lines, size, end, 0);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -440,7 +433,26 @@ void play_rank_1(cell_t * board, cell_t * newboard, int size, int lines, int beg
     else
       newboard[position] = 0;
 
-    ++beg;
+    for (int j = 1; j < size-1; ++j) {
+      position = end*size + j;
+      //a = bottom_column_safe_adjacent_to(board, size, beg, j);
+      a = adjacent_to(board, lines, size, end, j);
+      if (a == 2)
+        newboard[position] = board[position];
+      else if (a == 3)
+        newboard[position] = 1;
+      else
+        newboard[position] = 0;
+    }
+
+    position = end*size + size-1;
+    a = adjacent_to(board, lines, size, end, size-1);
+    if (a == 2)
+      newboard[position] = board[position];
+    else if (a == 3)
+      newboard[position] = 1;
+    else
+      newboard[position] = 0;
   }
 }
 
