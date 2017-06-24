@@ -127,7 +127,7 @@ int main (int argc, char *argv[]) {
       for (int i = 0; i < steps; ++i) {
         /*===========================================================*/
         /* __, tam. linha, tam. board, linha inicial, linha final    */
-        play(prev, next, size, lines+1, 0, lines);
+        play(prev, next, size, lines+1, 0, lines-1);
 
         tmp = next;
         next = prev;
