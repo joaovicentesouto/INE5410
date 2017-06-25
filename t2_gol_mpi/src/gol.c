@@ -120,8 +120,9 @@ int main (int argc, char *argv[]) {
     /*===============================================================*/
     /* 2: Primeiro e ultimo processos sao casos especiais            */
     if (rank == 1) {
-      MPI_Request my_last, next;
+      MPI_Request my_last, next_line;
       MPI_Status st;
+
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, &st);
@@ -130,8 +131,9 @@ int main (int argc, char *argv[]) {
         /*===========================================================*/
         /* __, tam. linha, tam. board, linha inicial, linha final    */
         play(prev, next, size, lines+1, 1, lines-2);
+        printf("%d\n", i);
 
-        if (i != 0) MPI_Wait(&next, &st);
+        if (i != 0) MPI_Wait(&next_line, &st);
         play(prev, next, size, lines+1, 0, 0);
         play(prev, next, size, lines+1, lines-1, lines-1);
         if (i != 0) MPI_Wait(&my_last, &st);
@@ -142,7 +144,7 @@ int main (int argc, char *argv[]) {
 
         /*===========================================================*/
         /* rank % 2 == 1  =>  envia primeiro                         */
-        MPI_Irecv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, &next);
+        MPI_Irecv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, &next_line);
         MPI_Isend((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, &my_last);
         
         #ifdef DEBUG
@@ -155,7 +157,7 @@ int main (int argc, char *argv[]) {
       MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else if (rank == processes-1) {
-      MPI_Request my_first, previous;
+      MPI_Request my_first, previous_line;
       MPI_Status st;
 
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
@@ -166,7 +168,7 @@ int main (int argc, char *argv[]) {
       for (int i = 0; i < steps; ++i) {
         play(prev, next, size, lines+1, 2, lines-1);
 
-        if (i != 0) MPI_Wait(&previous, &st);
+        if (i != 0) MPI_Wait(&previous_line, &st);
         play(prev, next, size, lines+1, 1, 1);
         play(prev, next, size, lines+1, lines, lines);
         if (i != 0) MPI_Wait(&my_first, &st);
@@ -175,7 +177,7 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
-        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, &previous);
+        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, &previous_line);
         MPI_Isend((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, &my_first);
 
         /*===========================================================*/
@@ -198,7 +200,7 @@ int main (int argc, char *argv[]) {
       MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else {
-      MPI_Request my_first, my_last, next, previous;
+      MPI_Request my_first, my_last, next_line, previous_line;
       MPI_Status st;
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
@@ -208,8 +210,8 @@ int main (int argc, char *argv[]) {
         play(prev, next, size, lines+2, 2, lines-1);
 
         if (i != 0) {
-          MPI_Wait(&previous, &st);
-          MPI_Wait(&next, &st);
+          MPI_Wait(&previous_line, &st);
+          MPI_Wait(&next_line, &st);
         }
         play(prev, next, size, lines+1, 1, 1);
         play(prev, next, size, lines+1, lines, lines);
@@ -222,8 +224,8 @@ int main (int argc, char *argv[]) {
         next = prev;
         prev = tmp;
 
-        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous);
-        MPI_Irecv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &next);
+        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
+        MPI_Irecv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &next_line);
         MPI_Isend((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &my_last);
         MPI_Isend((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &my_first);
 
