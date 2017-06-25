@@ -23,7 +23,7 @@ void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
 void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
-
+/** Conjunto de adjacent_to personalizados para minimizar os testes **/
 int adjacent_to(cell_t * board, int lines, int size, int i, int j);
 int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
 int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j);
@@ -39,7 +39,7 @@ int main (int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   if (processes == 1) {
-    printf("Eh necessario mais que um processo para o modelo mestre escravo funcionar.\n");
+    printf("Eh necessario mais que um processo para o modelo mestre-escravo funcionar.\n");
     MPI_Finalize();
     return 1;
   }
@@ -60,6 +60,7 @@ int main (int argc, char *argv[]) {
     /* Define quant. de linhas, balanceando para que fique o mais    */
     /* distribuido possivel. Criterio: parte quebrada da divisão     */
     /* <= 0.5 -> parte inteira | se nao -> parte inteira+1           */
+    /* limit_proc eh o numero de maximo de processos (um por linhas) */
     int i, limit_proc;
     limit_proc = processes-1 <= size? processes-1 : size;
 
@@ -104,7 +105,7 @@ int main (int argc, char *argv[]) {
       if (processes > 2)
         MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       
-      printf("Geracao steps: %d\n", k+1);
+      printf("%d ---------\n", k+1);
       print (prev, size);
     }
     #endif
@@ -135,8 +136,6 @@ int main (int argc, char *argv[]) {
     MPI_Bcast(&steps, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // MUITAS PARTES IGUAIS, DA PRA ABSTRAIR???
-
     /*===============================================================*/
     /* 2: Primeiro e ultimo processos sao casos especiais            */
     if (rank == 1) {
@@ -147,12 +146,15 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, &st);
 
-      for (int i = 0; i < steps-1; ++i) {
+      for (int i = 0; i < steps; ++i) {
         /*===========================================================*/
-        /* __, tam. linha, tam. board, linha inicial, linha final    */
+        /* Calcula as linhas que nao dependem de outros processos    */
         play_optimized(prev, next, size, lines+1, 0, lines-2);
 
-        if (i != 0 && processes > 2) MPI_Wait(&next_line, &st);
+        /*===========================================================*/
+        /* Espera receber a linha que depende de outros processo     */
+        if (i != 0 && processes > 2)
+          MPI_Wait(&next_line, &st);
         play_optimized(prev, next, size, lines+1, lines-1, lines-1);
 
         tmp = next;
@@ -161,7 +163,7 @@ int main (int argc, char *argv[]) {
 
         /* ======================================================= */
         /* Prepara pra receber sem bloquear e comeca envio         */
-        if (processes > 2) {
+        if (processes > 2 && i < steps-1) {
           MPI_Irecv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, &next_line);
           MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD); 
         }
@@ -171,20 +173,12 @@ int main (int argc, char *argv[]) {
         #endif
       }
 
-      play_optimized(prev, next, size, lines+1, 0, lines-2);
-      MPI_Wait(&next_line, &st);
-      play_optimized(prev, next, size, lines+1, lines-1, lines-1);
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
-
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam.     */
       MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else if ((rank == processes-1 && processes-1 <= size) || (rank == size && processes-1 > size)) {
-      MPI_Request my_first, previous_line;
+      MPI_Request previous_line;
       MPI_Status st;
 
       MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &st);
@@ -192,9 +186,15 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, &st);
 
-      for (int i = 0; i < steps-1; ++i) {
+      for (int i = 0; i < steps; ++i) {
+        /*===========================================================*/
+        /* Calcula as linhas que nao dependem de outros processos    */
         play_optimized(prev, next, size, lines+1, 2, lines);
-        if (i != 0) MPI_Wait(&previous_line, &st);
+        
+        /*===========================================================*/
+        /* Espera receber a linha que depende de outros processo     */
+        if (i != 0)
+          MPI_Wait(&previous_line, &st);
         play_optimized(prev, next, size, lines+1, 1, 1);
 
         tmp = next;
@@ -203,21 +203,15 @@ int main (int argc, char *argv[]) {
 
         /* ======================================================= */
         /* Prepara pra receber sem bloquear e comeca envio         */
-        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
-        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        if (i < steps-1) {
+          MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        }
 
         #ifdef DEBUG
         MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         #endif
       }
-
-      play_optimized(prev, next, size, lines+1, 2, lines);
-      MPI_Wait(&previous_line, &st);
-      play_optimized(prev, next, size, lines+1, 1, 1);
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
 
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam.     */
@@ -231,9 +225,13 @@ int main (int argc, char *argv[]) {
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
-      for (int i = 0; i < steps-1; ++i) {
+      for (int i = 0; i < steps; ++i) {
+        /*===========================================================*/
+        /* Calcula as linhas que nao dependem de outros processos    */
         play_optimized(prev, next, size, lines+2, 2, lines-1);
 
+        /*===========================================================*/
+        /* Espera receber a linha que depende de outros processo     */
         if (i != 0) {
           MPI_Wait(&previous_line, &st);
           MPI_Wait(&next_line, &st);
@@ -247,26 +245,17 @@ int main (int argc, char *argv[]) {
 
         /* ======================================================= */
         /* Prepara pra receber sem bloquear e comeca envio         */
-        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
-        MPI_Irecv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &next_line);
-        MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-
+        if (i < steps-1) {
+          MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
+          MPI_Irecv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &next_line);
+          MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
+        }
+        
         #ifdef DEBUG
         MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         #endif
       }
-
-      play_optimized(prev, next, size, lines+2, 2, lines-1);
-      
-      MPI_Wait(&previous_line, &st);
-      MPI_Wait(&next_line, &st);
-      play_optimized(prev, next, size, lines+2, 1, 1);
-      play_optimized(prev, next, size, lines+2, lines, lines);
-
-      tmp = next;
-      next = prev;
-      prev = tmp;
 
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam      */
@@ -384,7 +373,9 @@ int totally_safe_adjacent_to(cell_t * board, int size, int i, int j) {
 void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
   int a, position, end_inicial = end;
 
-  /* Se tiver que calcular a ultima linha end para que nao execute dentro do for das linhas */
+  /* ================================================================ */
+  /* Se tiver que calcular a ultima linha, "end" para que nao execute */
+  /* dentro do for das linhas seguras, se nao end+1 porque e seguro   */
   end = lines == end_inicial+1? end : end+1;
 
   /* ============================================================ */
@@ -427,8 +418,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
     ++beg;
   }
 
-  /* ============================================================ */
-  /* Linhas intermediarias 1 ate size-2, linhas seguras           */
+  /* ================================================================ */
+  /* Linhas intermediarias, qlqr processo: i < end+1 (process-1: end) */
   for (int i = beg; i < end; ++i) {
     position = i*size;
     a = left_line_safe_adjacent_to(board, size, i, 0);
