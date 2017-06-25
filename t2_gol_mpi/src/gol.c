@@ -61,10 +61,11 @@ int main (int argc, char *argv[]) {
     /*===============================================================*/
     /* Define quant. de linhas, balanceando para que fique o mais    */
     /* distribuido possivel. Criterio: parte quebrada da divisão     */
-    /* <= 0.5 -> parte inteira | se nao -> parte inteira+1           */
+    /* <= 0.5 e o ultimo tem que ter pelo menos uma linha -> parte   */
+    /* inteira | se nao -> parte inteira+1                           */
     float precision = ((float)size)/((float)(limit_proc));
     int lines = (int) precision;
-    lines += precision - lines <= 0.5 ? 0 : 1;
+    lines += (precision - lines <= 0.5) || ((lines+1)*(limit_proc-1) > size) ? 0 : 1;
 
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -306,7 +307,7 @@ int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
 }
 
 void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
-  int	a, position;
+  int a, position;
   /* for each cell, apply the rules of Life */
   for (int i = beg; i <= end; ++i) {
     for (int j = 0; j < size; ++j) {
@@ -333,7 +334,7 @@ void print(cell_t * board, int size) {
 
 /* read a file into the life board */
 void read_file(FILE * f, cell_t * board, int size) {
-  char	*s = (char *) malloc(size+10);
+  char  *s = (char *) malloc(size+10);
   fgets (s, size+10,f);                 // Ignore first line
 
   for (int j = 0; j < size; ++j) {      // For to read board file
