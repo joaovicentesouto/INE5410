@@ -1,4 +1,6 @@
 /*
+* Grupo A: Joao Vicente Souto e Fabiola Kretzer
+*
 * The Game of Life
 *
 * a cell is born, if it has exactly three neighbours
@@ -17,11 +19,11 @@
 #include <mpi.h>
 typedef unsigned char cell_t;
 
-/* Functions performed by the master */
+/* Funcoes executadas pelo mestre */
 void print(cell_t * board, int size);
 void read_file(FILE * f, cell_t * board, int size);
 
-/* Functions performed by the slaves */
+/* Funcoes executadas pelos escravos */
 int adjacent_to(cell_t * board, int lines, int size, int i, int j);
 void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
 
@@ -325,7 +327,7 @@ void print(cell_t * board, int size) {
   for (int j = 0; j < size; ++j) {  // For each row
     for (int i = 0; i < size; ++i)  // Print each column position...
       printf ("%c", board[i*size + j] ? 'x' : ' ');
-    printf ("\n");  // End line
+    printf ("\n");                  // End line
   }
 }
 
