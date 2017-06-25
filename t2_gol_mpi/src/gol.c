@@ -22,7 +22,6 @@ void print(cell_t * board, int size);
 void read_file(FILE * f, cell_t * board, int size);
 
 /* Functions performed by the slaves */
-void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
 void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end);
 
 int adjacent_to(cell_t * board, int lines, int size, int i, int j);
@@ -38,6 +37,12 @@ int main (int argc, char *argv[]) {
   MPI_Init(&argc, &argv);
   MPI_Comm_size(MPI_COMM_WORLD, &processes);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if (processes == 1) {
+    printf("Eh necessario mais que um processo para o modelo mestre escravo funcionar.\n");
+    MPI_Finalize();
+    return 1;
+  }
 
   if (rank == 0) {
 
@@ -87,10 +92,9 @@ int main (int argc, char *argv[]) {
 
     #ifdef DEBUG
     for (int k = 0; k < steps; ++k) {
-      MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
-      for (i = 1; i < processes-2; i++)
-        MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
-      MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+      for (i = 0; i < processes-2; i++)
+        MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       
       printf("Geracao steps: %d\n", k+1);
       print (prev, size);
@@ -99,10 +103,9 @@ int main (int argc, char *argv[]) {
 
     /*===============================================================*/
     /* 3: Espera pelo cálculo, imprime resultado e desaloca memória  */
-    MPI_Recv(prev, (lines*size), MPI_UNSIGNED_CHAR, 1, 0, MPI_COMM_WORLD, NULL);
-    for (i = 1; i < processes-2; i++)
-      MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
-    MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, NULL);
+    for (i = 0; i < processes-2; i++)
+      MPI_Recv((prev + i*lines*size), (lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv((prev + i*lines*size), (last_lines*size), MPI_UNSIGNED_CHAR, (i+1), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     #ifdef RESULT
     printf("Final:\n");
@@ -127,99 +130,99 @@ int main (int argc, char *argv[]) {
     /*===============================================================*/
     /* 2: Primeiro e ultimo processos sao casos especiais            */
     if (rank == 1) {
+      MPI_Request my_last, next_line;
+      MPI_Status st;
+
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
-      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, &st);
 
       for (int i = 0; i < steps; ++i) {
         /*===========================================================*/
         /* __, tam. linha, tam. board, linha inicial, linha final    */
-        //play(prev, next, size, lines+1, 0, lines-1);
+        if (i != 0) MPI_Wait(&next_line, &st);
         play_optimized(prev, next, size, lines+1, 0, lines-1);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        /*===========================================================*/
-        /* rank % 2 == 1  =>  envia primeiro                         */
+        MPI_Irecv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, &next_line);
         MPI_Send((prev + (lines-1)*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD);
-        MPI_Recv((prev + lines*size), size, MPI_UNSIGNED_CHAR, 2, 0, MPI_COMM_WORLD, NULL);
 
         #ifdef DEBUG
         MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         #endif
       }
 
+      MPI_Wait(&next_line, &st);
+
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam.     */
       MPI_Send(prev, lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else if (rank == processes-1) {
-      MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
+      MPI_Request my_first, previous_line;
+      MPI_Status st;
+
+      MPI_Recv(&lines, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &st);
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+1) * size);
-      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
+      MPI_Recv(prev, (lines+1)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, &st);
 
       for (int i = 0; i < steps; ++i) {
-        //play(prev, next, size, lines+1, 1, lines);
+        if (i != 0) MPI_Wait(&previous_line, &st);
         play_optimized(prev, next, size, lines+1, 1, lines);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        /*===========================================================*/
-        /* rank % 2 == 1 => envia primeiro | == 0 => recebe primeiro */
-        if (rank % 2 == 1) {
-          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
-          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
-        } else {
-          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, NULL);
-          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
-        }
-        // irecv???
+        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD, &previous_line);
+        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, (processes-2), 0, MPI_COMM_WORLD);
 
         #ifdef DEBUG
         MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         #endif
       }
+
+      MPI_Wait(&previous_line, &st);
 
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam.     */
       MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
 
     } else {
+      MPI_Request my_first, my_last, next_line, previous_line;
+      MPI_Status st;
       prev = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       next = (cell_t *) malloc(sizeof(cell_t) * (lines+2) * size);
       MPI_Recv(prev, (lines+2)*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD, NULL);
 
       for (int i = 0; i < steps; ++i) {
-        //play(prev, next, size, lines+2, 1, lines);
+        if (i != 0) {
+          MPI_Wait(&previous_line, &st);
+          MPI_Wait(&next_line, &st);
+        }
+
         play_optimized(prev, next, size, lines+2, 1, lines);
 
         tmp = next;
         next = prev;
         prev = tmp;
 
-        /*===========================================================*/
-        /* rank % 2 == 1 => envia primeiro | == 0 => recebe primeiro */
-        if (rank % 2 == 1) {
-          MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
-          MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-        } else {
-          MPI_Recv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, NULL);
-          MPI_Recv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, NULL);
-          MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
-          MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
-        }// irecv???
+        MPI_Irecv(prev, size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD, &previous_line);
+        MPI_Irecv((prev + (lines+1)*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD, &next_line);
+        MPI_Send((prev + lines*size), size, MPI_UNSIGNED_CHAR, rank+1, 0, MPI_COMM_WORLD);
+        MPI_Send((prev + size), size, MPI_UNSIGNED_CHAR, rank-1, 0, MPI_COMM_WORLD);
 
         #ifdef DEBUG
         MPI_Send((prev + size), lines*size, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         #endif
       }
+
+      MPI_Wait(&previous_line, &st);
+      MPI_Wait(&next_line, &st);
 
       /*===========================================================*/
       /* Envia resultado final, apenas as linhas que importam      */
@@ -239,7 +242,6 @@ int main (int argc, char *argv[]) {
 
 /* return the number of on cells adjacent to the i,j cell */
 int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
-  // Fonte: João Meyer
   int count = 0;
   if (i > 0) {
       count += board[(i-1)*size + j];
@@ -267,7 +269,7 @@ int adjacent_to(cell_t * board, int lines, int size, int i, int j) {
   return count;
 }
 
-/* Pode acessar qualquer coluna, menos a coluna da esquerda */
+/* Pode acessar qualquer linha, menos a coluna da esquerda */
 int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   int count = 0;
   count += board[(i-1)*size + j];
@@ -280,7 +282,7 @@ int left_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   return count;
 }
 
-/* Pode acessar qualquer coluna, menos a coluna da direita */
+/* Pode acessar qualquer linha, menos a coluna da direita */
 int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   int count = 0;
   count += board[(i-1)*size + j-1];
@@ -293,7 +295,7 @@ int right_line_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   return count;
 }
 
-/* Pode acessar qualquer coluna, menos a linhas de cima */
+/* Pode acessar qualquer coluna, menos a linha de cima */
 int top_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   int count = 0;
   count += board[i*size + j-1];
@@ -305,7 +307,7 @@ int top_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   return count;
 }
 
-/* Pode acessar qualquer coluna, menos a linhas de baixo */
+/* Pode acessar qualquer coluna, menos a linha de baixo */
 int bottom_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   int count = 0;
   count += board[(i-1)*size + j-1];
@@ -317,7 +319,7 @@ int bottom_column_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   return count;
 }
 
-/* Funcao usada quando eh totalmente seguro acessar ao redor da celular */
+/* Eh seguro acessar qualquer posicao ao redor da celula */
 int totally_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   int count = 0;
   count += board[(i-1)*size + j-1];
@@ -333,30 +335,21 @@ int totally_safe_adjacent_to(cell_t * board, int size, int i, int j) {
   return count;
 }
 
-void play(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
-  int	a, position;
-  /* for each cell, apply the rules of Life */
-  for (int i = beg; i <= end; ++i) {
-    for (int j = 0; j < size; ++j) {
-      position = i*size + j;
-      a = adjacent_to(board, lines, size, i, j);
-      if (a == 2)
-        newboard[position] = board[position];
-      else if (a == 3)
-        newboard[position] = 1;
-      else
-        newboard[position] = 0;
-    }
-  }
-}
-
 void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int beg, int end) {
   int a, position, end_inicial = end;
-  // Ajusta end
-  end = lines == end_inicial+1? end : end+1;
-  //printf("lines: %d, beg: %d, end: %d e soma: %d\n", lines-1, beg_inicial, end_inicial, beg_inicial+end_inicial);
 
-  /* for each cell, apply the rules of Life */
+  /* Se tiver que calcular a ultima linha end para que nao execute dentro do for das linhas */
+  end = lines == end_inicial+1? end : end+1;
+
+  /* ============================================================ */
+  /* Separamos o calculo em 3 partes:                             */
+  /* Inicio == 0 -> Coord. (0, j), cuidar linha superior          */
+  /* Intermediarios -> Coord. (i, j), cuidar apenas j [0, size-1] */
+  /* Fim == size-1 -> Coord. (size-1, j), cuidar linha inferior   */
+  /* Proposito: Muito menos comparacoes, ganho em tempo de exec.  */
+
+  /* ============================================================ */
+  /* Caso tenha que calcular a primeira (rank == 1 apenas)        */
   if (beg == 0) {
     a = adjacent_to(board, lines, size, 0, 0);
     if (a == 2)
@@ -368,7 +361,6 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
 
     for (int j = 1; j < size-1; ++j) {
       a = top_column_safe_adjacent_to(board, size, 0, j);
-      //a = adjacent_to(board, lines, size, 0, j);
       if (a == 2)
         newboard[j] = board[j];
       else if (a == 3)
@@ -389,10 +381,11 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
     ++beg;
   }
 
+  /* ============================================================ */
+  /* Linhas intermediarias 1 ate size-2, linhas seguras           */
   for (int i = beg; i < end; ++i) {
     position = i*size;
     a = left_line_safe_adjacent_to(board, size, i, 0);
-    //a = adjacent_to(board, lines, size, i, 0);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -403,7 +396,6 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
     for (int j = 1; j < size-1; ++j) {
       position = i*size + j;
       a = totally_safe_adjacent_to(board, size, i, j);
-      //a = adjacent_to(board, lines, size, i, j);
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -414,7 +406,6 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
 
     position = i*size + size-1;
     a = right_line_safe_adjacent_to(board, size, i, size-1);
-    //a = adjacent_to(board, lines, size, i, size-1);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -423,6 +414,9 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
       newboard[position] = 0;
   }
 
+
+  /* =================================================================== */
+  /* Caso tenha que calcular a ultima linha (rank == processes-1 apenas) */
   if (lines == end_inicial+1) {
     position = end_inicial*size;
     a = adjacent_to(board, lines, size, end_inicial, 0);
@@ -436,7 +430,6 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
     for (int j = 1; j < size-1; ++j) {
       position = end_inicial*size + j;
       a = bottom_column_safe_adjacent_to(board, size, end_inicial, j);
-      //a = adjacent_to(board, lines, size, end_inicial, j);
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -461,7 +454,7 @@ void print(cell_t * board, int size) {
   for (int j = 0; j < size; ++j) {  // For each row
     for (int i = 0; i < size; ++i)  // Print each column position...
       printf ("%c", board[i*size + j] ? 'x' : ' ');
-    printf ("\n");  // End line
+    printf ("\n");                  // End line
   }
 }
 
