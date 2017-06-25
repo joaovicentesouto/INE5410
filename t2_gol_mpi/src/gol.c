@@ -65,7 +65,7 @@ int main (int argc, char *argv[]) {
     /* inteira | se nao -> parte inteira+1                           */
     float precision = ((float)size)/((float)(limit_proc));
     int lines = (int) precision;
-    lines += (precision - lines <= 0.5) || ((lines+1)*(limit_proc-1) > size) ? 0 : 1;
+    lines += (precision - lines <= 0.5) || ((lines+1)*(limit_proc-1) >= size) ? 0 : 1;
 
     MPI_Bcast(&lines, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
