@@ -367,8 +367,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
       newboard[0] = 0;
 
     for (int j = 1; j < size-1; ++j) {
-      //a = top_column_safe_adjacent_to(board, size, 0, j);
-      a = adjacent_to(board, lines, size, 0, j);
+      a = top_column_safe_adjacent_to(board, size, 0, j);
+      //a = adjacent_to(board, lines, size, 0, j);
       if (a == 2)
         newboard[j] = board[j];
       else if (a == 3)
@@ -391,8 +391,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
 
   for (int i = beg; i < end; ++i) {
     position = i*size;
-    //a = left_line_safe_adjacent_to(board, size, i, 0);
-    a = adjacent_to(board, lines, size, i, 0);
+    a = left_line_safe_adjacent_to(board, size, i, 0);
+    //a = adjacent_to(board, lines, size, i, 0);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -402,8 +402,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
 
     for (int j = 1; j < size-1; ++j) {
       position = i*size + j;
-      //a = totally_safe_adjacent_to(board, size, i, j);
-      a = adjacent_to(board, lines, size, i, j);
+      a = totally_safe_adjacent_to(board, size, i, j);
+      //a = adjacent_to(board, lines, size, i, j);
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -413,8 +413,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
     }
 
     position = i*size + size-1;
-    //a = right_line_safe_adjacent_to(board, size, i, size-1);
-    a = adjacent_to(board, lines, size, i, size-1);
+    a = right_line_safe_adjacent_to(board, size, i, size-1);
+    //a = adjacent_to(board, lines, size, i, size-1);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -424,8 +424,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
   }
 
   if (lines == end_inicial+1) {
-    position = end*size;
-    a = adjacent_to(board, lines, size, end, 0);
+    position = end_inicial*size;
+    a = adjacent_to(board, lines, size, end_inicial, 0);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
@@ -434,9 +434,9 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
       newboard[position] = 0;
 
     for (int j = 1; j < size-1; ++j) {
-      position = end*size + j;
-      //a = bottom_column_safe_adjacent_to(board, size, beg, j);
-      a = adjacent_to(board, lines, size, end, j);
+      position = end_inicial*size + j;
+      a = bottom_column_safe_adjacent_to(board, size, end_inicial, j);
+      //a = adjacent_to(board, lines, size, end_inicial, j);
       if (a == 2)
         newboard[position] = board[position];
       else if (a == 3)
@@ -445,8 +445,8 @@ void play_optimized(cell_t * board, cell_t * newboard, int size, int lines, int 
         newboard[position] = 0;
     }
 
-    position = end*size + size-1;
-    a = adjacent_to(board, lines, size, end, size-1);
+    position = end_inicial*size + size-1;
+    a = adjacent_to(board, lines, size, end_inicial, size-1);
     if (a == 2)
       newboard[position] = board[position];
     else if (a == 3)
